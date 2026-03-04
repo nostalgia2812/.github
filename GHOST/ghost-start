@@ -6,70 +6,57 @@
 
 set -euo pipefail
 
+# ── Load shared library ───────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DASHBOARD="$SCRIPT_DIR/dashboard.html"
+source "$SCRIPT_DIR/lib/ghost-lib.sh"
+
+# ── Args ──────────────────────────────────────────────────────────────────────
 PORT="${1:-8421}"
 USERNAME="${2:-nostalgia2812}"
+DASHBOARD="$GHOST_ROOT/dashboard.html"
+URL="http://localhost:$PORT/dashboard.html"
 
-# ── Validate ──────────────────────────────────────────────────────────────
-if [[ ! -f "$DASHBOARD" ]]; then
-  echo "[ghost-start] ERROR: dashboard.html not found at $DASHBOARD"
-  exit 1
-fi
+# ── Validate ──────────────────────────────────────────────────────────────────
+[[ -f "$DASHBOARD" ]] || die "dashboard.html not found at $DASHBOARD — run ghost-setup first"
 
 if ! [[ "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
-  echo "[ghost-start] ERROR: invalid port '$PORT'"
-  exit 1
+  die "Invalid port '$PORT'"
 fi
 
-# ── Patch username into a temp copy so it auto-loads on open ─────────────
+if port_in_use "$PORT"; then
+  die "Port $PORT is already in use. Choose another: ./ghost-start 9000"
+fi
+
+ghost_banner "GitHub Library Dashboard"
+log "Dashboard : $DASHBOARD"
+log "Username  : $USERNAME"
+log "Port      : $PORT"
+log "URL       : $URL"
+echo ""
+log "Press Ctrl+C to stop."
+echo ""
+
+# ── Patch username into a temp copy ──────────────────────────────────────────
 TMP_DIR="$(mktemp -d)"
 TMP_HTML="$TMP_DIR/dashboard.html"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 sed "s/value = 'nostalgia2812'/value = '$USERNAME'/" "$DASHBOARD" > "$TMP_HTML"
 
-# ── Pick a server ─────────────────────────────────────────────────────────
+# ── Pick a server ─────────────────────────────────────────────────────────────
 serve() {
-  if command -v python3 &>/dev/null; then
+  if has_cmd python3; then
     python3 -m http.server "$PORT" --directory "$TMP_DIR"
-  elif command -v python &>/dev/null; then
+  elif has_cmd python; then
     (cd "$TMP_DIR" && python -m SimpleHTTPServer "$PORT")
-  elif command -v npx &>/dev/null; then
+  elif has_cmd npx; then
     npx --yes serve -l "$PORT" "$TMP_DIR"
   else
-    echo "[ghost-start] ERROR: no suitable server found (need python3, python, or npx)"
-    exit 1
+    die "No HTTP server found — install python3, python, or Node.js (npx)"
   fi
 }
 
-URL="http://localhost:$PORT/dashboard.html"
+# ── Open browser (best-effort) ────────────────────────────────────────────────
+{ sleep 0.8; open_browser "$URL"; } &
 
-echo "╔══════════════════════════════════════╗"
-echo "║       GHOST Dashboard Launcher       ║"
-echo "╚══════════════════════════════════════╝"
-echo ""
-echo "  Dashboard : $DASHBOARD"
-echo "  Username  : $USERNAME"
-echo "  Port      : $PORT"
-echo "  URL       : $URL"
-echo ""
-echo "  Press Ctrl+C to stop."
-echo ""
-
-# ── Open browser (best-effort, non-blocking) ──────────────────────────────
-open_browser() {
-  sleep 0.8
-  if command -v xdg-open &>/dev/null; then
-    xdg-open "$URL" &>/dev/null &
-  elif command -v open &>/dev/null; then
-    open "$URL" &>/dev/null &
-  elif command -v start &>/dev/null; then
-    start "$URL" &>/dev/null &
-  fi
-}
-
-open_browser &
-
-# ── Start server ──────────────────────────────────────────────────────────
 serve

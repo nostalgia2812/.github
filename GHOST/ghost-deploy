@@ -45,30 +45,18 @@
 
 set -euo pipefail
 
-# ── Colours ───────────────────────────────────────────────────────────────────
-if [[ -t 1 ]]; then
-  RED='\033[0;31m' GREEN='\033[0;32m' YELLOW='\033[1;33m'
-  BLUE='\033[0;34m' CYAN='\033[0;36m' BOLD='\033[1m' RESET='\033[0m'
-else
-  RED='' GREEN='' YELLOW='' BLUE='' CYAN='' BOLD='' RESET=''
-fi
-
-log()   { echo -e "${BLUE}[ghost-deploy]${RESET} $*"; }
-ok()    { echo -e "${GREEN}[✓]${RESET} $*"; }
-warn()  { echo -e "${YELLOW}[!]${RESET} $*"; }
-error() { echo -e "${RED}[✗]${RESET} $*" >&2; }
-die()   { error "$*"; exit 1; }
-hdr()   { echo -e "\n${BOLD}${CYAN}── $* ──${RESET}"; }
-
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# ── Load shared library (defines ok/log/warn/error/hdr/die/has_cmd etc.) ──────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GHOST_DIR="$SCRIPT_DIR"
-DASHBOARD="$GHOST_DIR/dashboard.html"
-GHOST_START="$GHOST_DIR/ghost-start"
-LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/ghost-dashboard"
-LOG_FILE="$LOG_DIR/ghost-dashboard.log"
-PID_FILE="$LOG_DIR/ghost-dashboard.pid"
-ENV_FILE="$GHOST_DIR/.ghost-env"
+source "$SCRIPT_DIR/lib/ghost-lib.sh"
+
+# ── Paths (use vars provided by ghost-lib.sh) ─────────────────────────────────
+GHOST_DIR="$GHOST_ROOT"
+DASHBOARD="$GHOST_ROOT/dashboard.html"
+GHOST_START="$GHOST_ROOT/ghost-start"
+LOG_DIR="$GHOST_LOGS"
+LOG_FILE="$GHOST_LOGS/ghost-deploy.log"
+PID_FILE="$GHOST_PID_FILE"
+ENV_FILE="$GHOST_ENV_FILE"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 MODE="${1:-local}"; shift 2>/dev/null || true
@@ -97,17 +85,10 @@ done
 
 # ── Banner ────────────────────────────────────────────────────────────────────
 banner() {
-  echo -e "${BOLD}"
-  echo "  ██████  ██   ██  ██████  ███████ ████████"
-  echo " ██       ██   ██ ██    ██ ██         ██   "
-  echo " ██   ███ ███████ ██    ██ ███████    ██   "
-  echo " ██    ██ ██   ██ ██    ██      ██    ██   "
-  echo "  ██████  ██   ██  ██████  ███████    ██   "
-  echo -e "${RESET}${CYAN}         GitHub Library Dashboard — Deploy${RESET}"
-  echo ""
-  echo -e "  Mode     : ${BOLD}${MODE}${RESET}"
-  echo -e "  Port     : ${BOLD}${PORT}${RESET}"
-  echo -e "  Username : ${BOLD}${USERNAME}${RESET}"
+  ghost_banner "GitHub Library Dashboard — Deploy"
+  echo -e "  Mode     : ${_BLD}${MODE}${_RST}"
+  echo -e "  Port     : ${_BLD}${PORT}${_RST}"
+  echo -e "  Username : ${_BLD}${USERNAME}${_RST}"
   echo ""
 }
 
@@ -122,18 +103,7 @@ check_port() {
     || die "Invalid port: $PORT"
 }
 
-require_cmd() {
-  command -v "$1" &>/dev/null || die "Required command not found: $1 — install it and retry"
-}
-
-port_in_use() {
-  if command -v ss &>/dev/null; then
-    ss -tlnp 2>/dev/null | grep -q ":$PORT " && return 0
-  elif command -v lsof &>/dev/null; then
-    lsof -i TCP:"$PORT" -sTCP:LISTEN &>/dev/null && return 0
-  fi
-  return 1
-}
+require_cmd() { has_cmd "$1" || die "Required command not found: $1 — install it and retry"; }
 
 # ── Patch username into dashboard ─────────────────────────────────────────────
 patch_dashboard() {
@@ -141,20 +111,9 @@ patch_dashboard() {
   sed "s/value = 'nostalgia2812'/value = '$USERNAME'/" "$DASHBOARD" > "$dest"
 }
 
-# ── Persist env ───────────────────────────────────────────────────────────────
-save_env() {
-  cat > "$ENV_FILE" <<EOF
-GHOST_MODE=$MODE
-GHOST_PORT=$PORT
-GHOST_USERNAME=$USERNAME
-GHOST_SERVICE_NAME=$SERVICE_NAME
-GHOST_DEPLOY_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-EOF
-}
-
-load_env() {
-  [[ -f "$ENV_FILE" ]] && source "$ENV_FILE" 2>/dev/null || true
-}
+# ── Persist env (delegate to ghost-lib.sh) ────────────────────────────────────
+save_env() { GHOST_MODE=$MODE GHOST_PORT=$PORT GHOST_USERNAME=$USERNAME ghost_save_env; }
+load_env()  { ghost_load_env; }
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MODE: local
@@ -164,7 +123,7 @@ mode_local() {
   check_dashboard
   check_port
 
-  if port_in_use; then
+  if port_in_use "$PORT"; then
     die "Port $PORT is already in use. Choose another with --port."
   fi
 
@@ -209,15 +168,6 @@ mode_local() {
     { sleep 0.8; open_browser "$URL"; } &
     trap 'rm -rf "$SERVE_DIR"' EXIT
     eval "$SERVER_CMD"
-  fi
-}
-
-open_browser() {
-  local url="$1"
-  if command -v xdg-open &>/dev/null; then
-    xdg-open "$url" &>/dev/null &
-  elif command -v open &>/dev/null; then
-    open "$url" &>/dev/null &
   fi
 }
 
@@ -533,7 +483,7 @@ mode_status() {
   fi
 
   # Docker
-  if command -v docker &>/dev/null; then
+  if has_cmd docker; then
     if docker ps --filter "name=$SERVICE_NAME" --format '{{.Names}}' | grep -q "$SERVICE_NAME"; then
       local CSTATUS
       CSTATUS="$(docker inspect --format '{{.State.Status}}' "$SERVICE_NAME" 2>/dev/null)"
@@ -625,7 +575,7 @@ mode_uninstall() {
   fi
 
   # Remove Docker image
-  if command -v docker &>/dev/null; then
+  if has_cmd docker; then
     if docker images -q "$DOCKER_IMAGE" | grep -q .; then
       docker rmi "$DOCKER_IMAGE" 2>/dev/null && ok "Removed Docker image: $DOCKER_IMAGE"
     fi
