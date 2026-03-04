@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GitHub Library Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --border:    #30363d;
+      --accent:    #238636;
+      --accent-h:  #2ea043;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --tag-bg:    #1f2937;
+      --tag-text:  #58a6ff;
+      --star:      #e3b341;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    header svg { flex-shrink: 0; }
+
+    .header-title { font-size: 18px; font-weight: 600; }
+
+    .header-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    #username-input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      width: 180px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    #username-input:focus { border-color: var(--tag-text); }
+
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    button:hover { background: var(--accent-h); }
+
+    /* ── Stats bar ── */
+    #stats-bar {
+      display: none;
+      align-items: center;
+      gap: 24px;
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+
+    #stats-bar.visible { display: flex; }
+
+    .stat-item { display: flex; align-items: center; gap: 6px; }
+    .stat-value { color: var(--text); font-weight: 600; }
+
+    /* ── Controls ── */
+    #controls {
+      display: none;
+      padding: 14px 24px;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+    #controls.visible { display: flex; }
+
+    #search-input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      width: 240px;
+      outline: none;
+    }
+    #search-input:focus { border-color: var(--tag-text); }
+
+    select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 14px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    #result-count { margin-left: auto; color: var(--muted); font-size: 13px; }
+
+    /* ── Grid ── */
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+      padding: 24px;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: border-color .2s, transform .15s;
+      text-decoration: none;
+      color: inherit;
+    }
+    .card:hover {
+      border-color: var(--tag-text);
+      transform: translateY(-2px);
+    }
+
+    .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+
+    .repo-icon { color: var(--muted); flex-shrink: 0; margin-top: 2px; }
+
+    .repo-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--tag-text);
+      word-break: break-word;
+      flex: 1;
+    }
+
+    .fork-badge {
+      font-size: 11px;
+      background: var(--tag-bg);
+      color: var(--muted);
+      padding: 2px 7px;
+      border-radius: 20px;
+      flex-shrink: 0;
+      align-self: flex-start;
+    }
+
+    .repo-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+      flex: 1;
+    }
+
+    .card-footer {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-top: auto;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .footer-item { display: flex; align-items: center; gap: 4px; }
+
+    .lang-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .topics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .topic {
+      background: var(--tag-bg);
+      color: var(--tag-text);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 20px;
+    }
+
+    /* ── Profile panel ── */
+    #profile-panel {
+      display: none;
+      align-items: center;
+      gap: 16px;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    #profile-panel.visible { display: flex; }
+
+    #avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+    }
+
+    .profile-info { display: flex; flex-direction: column; gap: 2px; }
+    .profile-name { font-size: 16px; font-weight: 600; }
+    .profile-login { font-size: 13px; color: var(--muted); }
+    .profile-bio { font-size: 13px; color: var(--muted); max-width: 480px; }
+
+    .profile-link {
+      margin-left: auto;
+      color: var(--tag-text);
+      font-size: 13px;
+      text-decoration: none;
+    }
+    .profile-link:hover { text-decoration: underline; }
+
+    /* ── States ── */
+    #message {
+      text-align: center;
+      padding: 60px 24px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--tag-text);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-text { color: #f85149; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <svg width="24" height="24" viewBox="0 0 16 16" fill="#e6edf3" aria-hidden="true">
+    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+             0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
+             -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87
+             2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95
+             0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21
+             2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04
+             2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82
+             2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01
+             1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+  </svg>
+  <span class="header-title">GitHub Library Dashboard</span>
+  <div class="header-right">
+    <input id="username-input" type="text" placeholder="GitHub username…" />
+    <button id="load-btn">Load</button>
+  </div>
+</header>
+
+<!-- Profile -->
+<div id="profile-panel">
+  <img id="avatar" src="" alt="avatar" />
+  <div class="profile-info">
+    <span class="profile-name" id="profile-name"></span>
+    <span class="profile-login" id="profile-login"></span>
+    <span class="profile-bio" id="profile-bio"></span>
+  </div>
+  <a id="profile-link" class="profile-link" href="#" target="_blank" rel="noopener">
+    View on GitHub ↗
+  </a>
+</div>
+
+<!-- Stats -->
+<div id="stats-bar">
+  <div class="stat-item">Repos: <span class="stat-value" id="stat-total">0</span></div>
+  <div class="stat-item">Stars: <span class="stat-value" id="stat-stars">0</span></div>
+  <div class="stat-item">Forks: <span class="stat-value" id="stat-forks">0</span></div>
+  <div class="stat-item">Languages: <span class="stat-value" id="stat-langs">0</span></div>
+</div>
+
+<!-- Controls -->
+<div id="controls">
+  <input id="search-input" type="text" placeholder="Search repositories…" />
+  <select id="sort-select">
+    <option value="updated">Recently updated</option>
+    <option value="stars">Most stars</option>
+    <option value="forks">Most forks</option>
+    <option value="name">Name A–Z</option>
+  </select>
+  <select id="lang-filter">
+    <option value="">All languages</option>
+  </select>
+  <select id="type-filter">
+    <option value="">All types</option>
+    <option value="source">Sources only</option>
+    <option value="fork">Forks only</option>
+  </select>
+  <span id="result-count"></span>
+</div>
+
+<!-- Repo grid -->
+<div id="grid"></div>
+<div id="message">Enter a GitHub username above and click Load.</div>
+
+<script>
+  // ── Language colour map (common languages) ──────────────────────────────
+  const LANG_COLORS = {
+    JavaScript: '#f1e05a', TypeScript: '#3178c6', Python: '#3572A5',
+    Ruby: '#701516', Go: '#00ADD8', Rust: '#dea584', Java: '#b07219',
+    'C++': '#f34b7d', C: '#555555', 'C#': '#178600', PHP: '#4F5D95',
+    Swift: '#F05138', Kotlin: '#A97BFF', Dart: '#00B4AB', Shell: '#89e051',
+    HTML: '#e34c26', CSS: '#563d7c', Vue: '#41b883', Svelte: '#ff3e00',
+    Jupyter Notebook: '#DA5B0B', R: '#198CE7', Scala: '#c22d40',
+    Haskell: '#5e5086', Elixir: '#6e4a7e', Clojure: '#db5855',
+  };
+
+  // ── State ────────────────────────────────────────────────────────────────
+  let allRepos = [];
+
+  // ── DOM refs ─────────────────────────────────────────────────────────────
+  const usernameInput = document.getElementById('username-input');
+  const loadBtn       = document.getElementById('load-btn');
+  const grid          = document.getElementById('grid');
+  const message       = document.getElementById('message');
+  const searchInput   = document.getElementById('search-input');
+  const sortSelect    = document.getElementById('sort-select');
+  const langFilter    = document.getElementById('lang-filter');
+  const typeFilter    = document.getElementById('type-filter');
+  const resultCount   = document.getElementById('result-count');
+  const statsBar      = document.getElementById('stats-bar');
+  const controls      = document.getElementById('controls');
+  const profilePanel  = document.getElementById('profile-panel');
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function setMessage(html, isError = false) {
+    grid.innerHTML = '';
+    message.style.display = 'block';
+    message.innerHTML = html;
+    if (isError) message.querySelector('span') && (message.querySelector('span').className = 'error-text');
+  }
+
+  function hideMessage() { message.style.display = 'none'; }
+
+  function langDot(lang) {
+    const color = LANG_COLORS[lang] || '#8b949e';
+    return `<span class="lang-dot" style="background:${color}"></span>`;
+  }
+
+  function relativeTime(dateStr) {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 30) return `${d}d ago`;
+    const mo = Math.floor(d / 30);
+    if (mo < 12) return `${mo}mo ago`;
+    return `${Math.floor(mo / 12)}y ago`;
+  }
+
+  // ── Fetch all pages ──────────────────────────────────────────────────────
+  async function fetchAllRepos(username) {
+    let repos = [], page = 1;
+    while (true) {
+      const r = await fetch(
+        `https://api.github.com/users/${encodeURIComponent(username)}/repos?per_page=100&page=${page}`
+      );
+      if (!r.ok) throw new Error(`GitHub API error ${r.status}: ${r.statusText}`);
+      const data = await r.json();
+      repos = repos.concat(data);
+      if (data.length < 100) break;
+      page++;
+    }
+    return repos;
+  }
+
+  async function fetchUser(username) {
+    const r = await fetch(`https://api.github.com/users/${encodeURIComponent(username)}`);
+    if (!r.ok) throw new Error(`User not found (${r.status})`);
+    return r.json();
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  function renderRepos(repos) {
+    grid.innerHTML = '';
+    if (!repos.length) {
+      grid.innerHTML = '<p style="color:var(--muted);padding:24px">No repositories match your filters.</p>';
+      resultCount.textContent = '0 repos';
+      return;
+    }
+
+    resultCount.textContent = `${repos.length} repo${repos.length !== 1 ? 's' : ''}`;
+
+    repos.forEach(repo => {
+      const card = document.createElement('a');
+      card.className = 'card';
+      card.href = repo.html_url;
+      card.target = '_blank';
+      card.rel = 'noopener noreferrer';
+
+      const topics = (repo.topics || []).slice(0, 4)
+        .map(t => `<span class="topic">${t}</span>`).join('');
+
+      card.innerHTML = `
+        <div class="card-header">
+          <svg class="repo-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75
+                     0 01-.75.75h-2.5a.75.75 0 010-1.5h1.75v-2h-8a1 1 0 00-.714
+                     1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356
+                     0-.694.074-1 .208V2.5a1 1 0 011-1h8zM5 12.25v3.25a.25.25 0
+                     00.4.2l1.45-1.087a.25.25 0 01.3 0L8.6 15.7a.25.25 0
+                     00.4-.2v-3.25a.25.25 0 00-.25-.25h-3.5a.25.25 0 00-.25.25z"/>
+          </svg>
+          <span class="repo-name">${repo.name}</span>
+          ${repo.fork ? '<span class="fork-badge">fork</span>' : ''}
+        </div>
+        ${repo.description ? `<p class="repo-desc">${repo.description}</p>` : ''}
+        ${topics ? `<div class="topics">${topics}</div>` : ''}
+        <div class="card-footer">
+          ${repo.language ? `<span class="footer-item">${langDot(repo.language)} ${repo.language}</span>` : ''}
+          <span class="footer-item">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="var(--star)">
+              <path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75
+                       0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0
+                       01-1.088.791L8 12.347l-3.766 1.98a.75.75 0
+                       01-1.088-.79l.72-4.194L.818 6.374a.75.75 0
+                       01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/>
+            </svg>
+            ${repo.stargazers_count.toLocaleString()}
+          </span>
+          <span class="footer-item">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="var(--muted)">
+              <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25
+                       2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251
+                       2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25
+                       2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0
+                       015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0
+                       011.5 0zm3-8.75a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/>
+            </svg>
+            ${repo.forks_count.toLocaleString()}
+          </span>
+          <span class="footer-item" style="margin-left:auto">
+            Updated ${relativeTime(repo.updated_at)}
+          </span>
+        </div>
+      `;
+
+      grid.appendChild(card);
+    });
+  }
+
+  // ── Filter + sort ────────────────────────────────────────────────────────
+  function applyFilters() {
+    const q    = searchInput.value.toLowerCase();
+    const lang = langFilter.value;
+    const type = typeFilter.value;
+    const sort = sortSelect.value;
+
+    let list = allRepos.filter(r => {
+      if (q && !r.name.toLowerCase().includes(q) &&
+               !(r.description || '').toLowerCase().includes(q)) return false;
+      if (lang && r.language !== lang) return false;
+      if (type === 'source' && r.fork) return false;
+      if (type === 'fork'   && !r.fork) return false;
+      return true;
+    });
+
+    list.sort((a, b) => {
+      if (sort === 'stars')   return b.stargazers_count - a.stargazers_count;
+      if (sort === 'forks')   return b.forks_count - a.forks_count;
+      if (sort === 'name')    return a.name.localeCompare(b.name);
+      return new Date(b.updated_at) - new Date(a.updated_at);
+    });
+
+    renderRepos(list);
+  }
+
+  searchInput.addEventListener('input', applyFilters);
+  sortSelect.addEventListener('change', applyFilters);
+  langFilter.addEventListener('change', applyFilters);
+  typeFilter.addEventListener('change', applyFilters);
+
+  // ── Load user ────────────────────────────────────────────────────────────
+  async function loadUser() {
+    const username = usernameInput.value.trim();
+    if (!username) return;
+
+    // Reset
+    allRepos = [];
+    statsBar.classList.remove('visible');
+    controls.classList.remove('visible');
+    profilePanel.classList.remove('visible');
+    grid.innerHTML = '';
+    langFilter.innerHTML = '<option value="">All languages</option>';
+    setMessage('<span class="spinner"></span> Loading repositories…');
+
+    try {
+      const [user, repos] = await Promise.all([
+        fetchUser(username),
+        fetchAllRepos(username),
+      ]);
+
+      allRepos = repos;
+
+      // Profile panel
+      document.getElementById('avatar').src = user.avatar_url;
+      document.getElementById('profile-name').textContent  = user.name || user.login;
+      document.getElementById('profile-login').textContent = `@${user.login}`;
+      document.getElementById('profile-bio').textContent   = user.bio || '';
+      document.getElementById('profile-link').href         = user.html_url;
+      profilePanel.classList.add('visible');
+
+      // Stats
+      const totalStars = repos.reduce((s, r) => s + r.stargazers_count, 0);
+      const totalForks = repos.reduce((s, r) => s + r.forks_count, 0);
+      const langs = new Set(repos.map(r => r.language).filter(Boolean));
+      document.getElementById('stat-total').textContent = repos.length.toLocaleString();
+      document.getElementById('stat-stars').textContent = totalStars.toLocaleString();
+      document.getElementById('stat-forks').textContent = totalForks.toLocaleString();
+      document.getElementById('stat-langs').textContent = langs.size.toLocaleString();
+      statsBar.classList.add('visible');
+
+      // Language filter options
+      [...langs].sort().forEach(l => {
+        const opt = document.createElement('option');
+        opt.value = opt.textContent = l;
+        langFilter.appendChild(opt);
+      });
+
+      controls.classList.add('visible');
+      hideMessage();
+      applyFilters();
+
+    } catch (err) {
+      setMessage(`<span class="error-text">Error: ${err.message}</span>`, true);
+    }
+  }
+
+  loadBtn.addEventListener('click', loadUser);
+  usernameInput.addEventListener('keydown', e => { if (e.key === 'Enter') loadUser(); });
+
+  // Auto-load nostalgia2812 on open
+  usernameInput.value = 'nostalgia2812';
+  loadUser();
+</script>
+</body>
+</html>
