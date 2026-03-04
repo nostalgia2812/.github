@@ -173,7 +173,7 @@ if $DO_LAB; then
 
     # ── Network / pentest tools ───────────────────────────────────────────
     step "Network & pentest tools"
-    for pkg in nmap aircrack-ng kismet wifite bettercap; do
+    for pkg in nmap masscan aircrack-ng kismet wifite bettercap net-tools dnsutils whois tor; do
       apt_install "$pkg"
     done
 
@@ -346,6 +346,159 @@ WRAP
     ok "dnsrecon ready"
   }
 
+  # ══════════════════════════════════════════════════════════════════════════
+  # ── Robin — AI-Powered Dark Web OSINT (apurvsinghgautam/robin)
+  # Same class as Sublist3r / theHarvester / dnsrecon:
+  #   ghost_clone → isolated venv → requirements.txt → bin/robin wrapper
+  # Requires: Tor running  (sudo systemctl start tor)
+  # API key: reads OPENAI_API_KEY / GOOGLE_API_KEY / GEMINI_API_KEY from env
+  #          (automatically exported by ghost-vault.sh on vault decrypt)
+  # ══════════════════════════════════════════════════════════════════════════
+  step "Robin (AI Dark Web OSINT — apurvsinghgautam/robin)"
+  ROBIN_DIR="$GHOST_RECON/robin"
+  ROBIN_VENV="$ROBIN_DIR/venv"
+
+  run_step "robin-clone" ghost_clone "https://github.com/apurvsinghgautam/robin.git" "$ROBIN_DIR"
+
+  if [[ -d "$ROBIN_DIR" ]]; then
+    # Isolated venv so Robin's deps don't collide with other tools
+    if [[ ! -d "$ROBIN_VENV" ]]; then
+      python3 -m venv "$ROBIN_VENV" && ok "Robin venv created"
+    else
+      ok "Robin venv already exists"
+    fi
+
+    # Install Robin requirements into venv
+    source "$ROBIN_VENV/bin/activate"
+    pip install --upgrade pip --quiet
+    for rfile in "$ROBIN_DIR/requirements.txt" "$ROBIN_DIR/requirements/requirements.txt"; do
+      if [[ -f "$rfile" ]]; then
+        if pip install --quiet -r "$rfile"; then
+          ok "Robin dependencies installed from $rfile"
+        else
+          warn "Some Robin deps failed — tool may have limited functionality"
+        fi
+        break
+      fi
+    done
+    deactivate 2>/dev/null || true
+
+    # Locate Robin entry script
+    ROBIN_PY=""
+    for c in robin.py main.py __main__.py; do
+      [[ -f "$ROBIN_DIR/$c" ]] && { ROBIN_PY="$ROBIN_DIR/$c"; break; }
+    done
+
+    if [[ -n "$ROBIN_PY" ]]; then
+      # Write venv-aware wrapper — same pattern as all other GHOST recon tools
+      cat > "$GHOST_ROOT/bin/robin" <<WRAP
+#!/usr/bin/env bash
+# GHOST wrapper for Robin — AI Dark Web OSINT
+# https://github.com/apurvsinghgautam/robin
+#
+# REQUIRES: Tor running
+#   sudo systemctl start tor
+#
+# API KEY: Loaded from GHOST vault automatically.
+#   Or set manually: export OPENAI_API_KEY=<key>
+#
+# USAGE:
+#   robin                            # interactive mode
+#   robin -q "ransomware"            # single query
+#   robin -q "leaked credentials" -o $GHOST_DATA/robin_results.txt
+
+# Activate Robin's isolated venv
+source "$ROBIN_VENV/bin/activate"
+
+# Ensure Tor is available warning
+if ! command -v tor &>/dev/null && ! systemctl is-active tor &>/dev/null 2>&1; then
+  echo "[!] Warning: Tor may not be running. Robin requires Tor for dark web access."
+  echo "[!] Start it with: sudo systemctl start tor"
+fi
+
+cd "$ROBIN_DIR"
+exec python3 "$ROBIN_PY" "\$@"
+WRAP
+      chmod +x "$GHOST_ROOT/bin/robin"
+      ok "robin wrapper ready: $GHOST_ROOT/bin/robin"
+    else
+      warn "Robin entry script not found in $ROBIN_DIR — check clone"
+    fi
+  fi
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # ── Shodan CLI — Internet-wide host/port OSINT
+  # Same class: pip install → bin/shodan wrapper
+  # Requires: shodan init <API_KEY>  (free key at account.shodan.io)
+  # ══════════════════════════════════════════════════════════════════════════
+  step "Shodan CLI (internet-wide OSINT)"
+  if pip3 install --quiet shodan 2>/dev/null; then
+    SHODAN_BIN="$(command -v shodan 2>/dev/null || echo "")"
+    if [[ -n "$SHODAN_BIN" ]]; then
+      cat > "$GHOST_ROOT/bin/ghost-shodan" <<WRAP
+#!/usr/bin/env bash
+# GHOST wrapper for Shodan CLI
+# Init once: shodan init <YOUR_SHODAN_API_KEY>
+# Usage:
+#   ghost-shodan host 8.8.8.8
+#   ghost-shodan search "apache"
+#   ghost-shodan count "nginx"
+exec "$SHODAN_BIN" "\$@"
+WRAP
+      chmod +x "$GHOST_ROOT/bin/ghost-shodan"
+      ok "Shodan CLI ready: $GHOST_ROOT/bin/ghost-shodan"
+    fi
+  else
+    warn "Shodan CLI pip install failed — install manually: pip3 install shodan"
+  fi
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # ── Network scanning wrappers (nmap / masscan) — same bin/ class
+  # These are system tools installed in --lab; wrappers provide GHOST-native
+  # output paths and pre-configured scan profiles.
+  # ══════════════════════════════════════════════════════════════════════════
+  step "Network scanning wrappers (nmap / masscan)"
+
+  if has_cmd nmap; then
+    cat > "$GHOST_ROOT/bin/ghost-scan" <<WRAP
+#!/usr/bin/env bash
+# GHOST nmap wrapper — saves XML + greppable output to GHOST data dir
+# Usage: ghost-scan <target> [nmap-flags]
+#   ghost-scan 192.168.1.0/24
+#   ghost-scan 192.168.1.1 -sV -p 1-65535
+TARGET="\${1:?Usage: ghost-scan <target> [extra nmap flags]}"
+shift
+OUTBASE="$GHOST_DATA/nmap_\$(echo "\$TARGET" | tr '/' '_' | tr ' ' '_')_\$(date +%Y%m%d_%H%M%S)"
+echo "[*] Scanning: \$TARGET"
+echo "[*] Output:   \$OUTBASE.{xml,gnmap,nmap}"
+exec nmap -sV -sC -oA "\$OUTBASE" "\$TARGET" "\$@"
+WRAP
+    chmod +x "$GHOST_ROOT/bin/ghost-scan"
+    ok "ghost-scan (nmap) wrapper ready"
+  else
+    warn "nmap not found — install with: sudo apt install nmap"
+  fi
+
+  if has_cmd masscan; then
+    cat > "$GHOST_ROOT/bin/ghost-masscan" <<WRAP
+#!/usr/bin/env bash
+# GHOST masscan wrapper — fast internet-scale port scanner
+# Requires root (raw sockets).
+# Usage: ghost-masscan <target> [masscan-flags]
+#   ghost-masscan 192.168.1.0/24 -p 80,443,22
+TARGET="\${1:?Usage: ghost-masscan <target> [extra masscan flags]}"
+shift
+OUTFILE="$GHOST_DATA/masscan_\$(echo "\$TARGET" | tr '/' '_')_\$(date +%Y%m%d_%H%M%S).json"
+echo "[*] Scanning: \$TARGET"
+echo "[*] Output:   \$OUTFILE"
+exec sudo masscan "\$TARGET" --rate=1000 -oJ "\$OUTFILE" "\$@"
+WRAP
+    chmod +x "$GHOST_ROOT/bin/ghost-masscan"
+    ok "ghost-masscan wrapper ready"
+  else
+    warn "masscan not found — install with: sudo apt install masscan"
+  fi
+
   ok "Recon tools complete"
 fi
 
@@ -478,11 +631,16 @@ echo "    ghost-start                          # Open secure AI session"
 echo "    ghost-vault.sh --target 192.168.1.1  # Start pentestgpt with target"
 echo "    ghost-kimi                           # Start Kimi AI session"
 echo ""
-echo -e "  ${_BLD}Recon tools:${_RST}"
+echo -e "  ${_BLD}Recon & network scanning OSINT:${_RST}"
+echo "    sudo systemctl start tor               # required for Robin"
+echo "    robin -q 'search term'                 # AI dark web OSINT"
+echo "    robin                                  # Robin interactive session"
 echo "    sublist3r -d example.com"
 echo "    theharvester -d example.com -b google"
 echo "    dnsrecon -d example.com"
-echo "    nmap -sV <target>"
+echo "    ghost-scan <target>                    # nmap (saves XML+gnmap to GHOST/tmp/data)"
+echo "    ghost-masscan <target> -p 80,443       # masscan fast scanner"
+echo "    ghost-shodan host <ip>                 # Shodan OSINT lookup"
 echo ""
 echo -e "  ${_BLD}Dashboard:${_RST}"
 echo "    ghost-deploy local --bg              # Background HTTP server"
