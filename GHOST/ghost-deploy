@@ -1,0 +1,666 @@
+#!/usr/bin/env bash
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  ghost-deploy — GHOST Full Deployment Script                           ║
+# ║  Integrates dashboard.html + ghost-start into a complete deployment    ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+#
+# USAGE
+#   ./ghost-deploy [mode] [options]
+#
+# MODES
+#   local      Serve locally (foreground or background daemon)
+#   docker     Build + run in a Docker container
+#   systemd    Install as a persistent systemd service
+#   pages      Deploy static files to GitHub Pages
+#   stop       Stop a running local/docker/systemd instance
+#   status     Show current deployment status
+#   logs       Tail deployment logs
+#   uninstall  Remove all deployment artefacts
+#
+# OPTIONS (all modes)
+#   --port   PORT        Port to serve on              (default: 8421)
+#   --user   USERNAME    GitHub username to pre-load   (default: nostalgia2812)
+#   --name   NAME        Service / container name      (default: ghost-dashboard)
+#
+# LOCAL-SPECIFIC
+#   --bg                 Run in background (daemon mode)
+#
+# DOCKER-SPECIFIC
+#   --image  IMAGE       Docker image tag               (default: ghost-dashboard:latest)
+#
+# PAGES-SPECIFIC
+#   --repo   REPO        GitHub repo (owner/repo)       (default: auto-detect from git remote)
+#   --branch BRANCH      GitHub Pages branch            (default: gh-pages)
+#
+# EXAMPLES
+#   ./ghost-deploy local
+#   ./ghost-deploy local --bg --port 9000 --user torvalds
+#   ./ghost-deploy docker --port 8080
+#   ./ghost-deploy systemd
+#   ./ghost-deploy pages --repo nostalgia2812/.github
+#   ./ghost-deploy status
+#   ./ghost-deploy stop
+#   ./ghost-deploy logs
+#   ./ghost-deploy uninstall
+
+set -euo pipefail
+
+# ── Colours ───────────────────────────────────────────────────────────────────
+if [[ -t 1 ]]; then
+  RED='\033[0;31m' GREEN='\033[0;32m' YELLOW='\033[1;33m'
+  BLUE='\033[0;34m' CYAN='\033[0;36m' BOLD='\033[1m' RESET='\033[0m'
+else
+  RED='' GREEN='' YELLOW='' BLUE='' CYAN='' BOLD='' RESET=''
+fi
+
+log()   { echo -e "${BLUE}[ghost-deploy]${RESET} $*"; }
+ok()    { echo -e "${GREEN}[✓]${RESET} $*"; }
+warn()  { echo -e "${YELLOW}[!]${RESET} $*"; }
+error() { echo -e "${RED}[✗]${RESET} $*" >&2; }
+die()   { error "$*"; exit 1; }
+hdr()   { echo -e "\n${BOLD}${CYAN}── $* ──${RESET}"; }
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GHOST_DIR="$SCRIPT_DIR"
+DASHBOARD="$GHOST_DIR/dashboard.html"
+GHOST_START="$GHOST_DIR/ghost-start"
+LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/ghost-dashboard"
+LOG_FILE="$LOG_DIR/ghost-dashboard.log"
+PID_FILE="$LOG_DIR/ghost-dashboard.pid"
+ENV_FILE="$GHOST_DIR/.ghost-env"
+
+# ── Defaults ──────────────────────────────────────────────────────────────────
+MODE="${1:-local}"; shift 2>/dev/null || true
+PORT="8421"
+USERNAME="nostalgia2812"
+SERVICE_NAME="ghost-dashboard"
+BG=false
+DOCKER_IMAGE="ghost-dashboard:latest"
+GH_PAGES_BRANCH="gh-pages"
+GH_REPO=""
+
+# ── Parse flags ───────────────────────────────────────────────────────────────
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --port)   PORT="$2";   shift 2 ;;
+    --user)   USERNAME="$2"; shift 2 ;;
+    --name)   SERVICE_NAME="$2"; shift 2 ;;
+    --bg)     BG=true; shift ;;
+    --image)  DOCKER_IMAGE="$2"; shift 2 ;;
+    --repo)   GH_REPO="$2"; shift 2 ;;
+    --branch) GH_PAGES_BRANCH="$2"; shift 2 ;;
+    -h|--help) mode_usage; exit 0 ;;
+    *) warn "Unknown option: $1"; shift ;;
+  esac
+done
+
+# ── Banner ────────────────────────────────────────────────────────────────────
+banner() {
+  echo -e "${BOLD}"
+  echo "  ██████  ██   ██  ██████  ███████ ████████"
+  echo " ██       ██   ██ ██    ██ ██         ██   "
+  echo " ██   ███ ███████ ██    ██ ███████    ██   "
+  echo " ██    ██ ██   ██ ██    ██      ██    ██   "
+  echo "  ██████  ██   ██  ██████  ███████    ██   "
+  echo -e "${RESET}${CYAN}         GitHub Library Dashboard — Deploy${RESET}"
+  echo ""
+  echo -e "  Mode     : ${BOLD}${MODE}${RESET}"
+  echo -e "  Port     : ${BOLD}${PORT}${RESET}"
+  echo -e "  Username : ${BOLD}${USERNAME}${RESET}"
+  echo ""
+}
+
+# ── Sanity checks ─────────────────────────────────────────────────────────────
+check_dashboard() {
+  [[ -f "$DASHBOARD" ]] || die "dashboard.html not found at $DASHBOARD"
+  [[ -f "$GHOST_START" ]] || die "ghost-start not found at $GHOST_START"
+}
+
+check_port() {
+  [[ "$PORT" =~ ^[0-9]+$ ]] && (( PORT >= 1 && PORT <= 65535 )) \
+    || die "Invalid port: $PORT"
+}
+
+require_cmd() {
+  command -v "$1" &>/dev/null || die "Required command not found: $1 — install it and retry"
+}
+
+port_in_use() {
+  if command -v ss &>/dev/null; then
+    ss -tlnp 2>/dev/null | grep -q ":$PORT " && return 0
+  elif command -v lsof &>/dev/null; then
+    lsof -i TCP:"$PORT" -sTCP:LISTEN &>/dev/null && return 0
+  fi
+  return 1
+}
+
+# ── Patch username into dashboard ─────────────────────────────────────────────
+patch_dashboard() {
+  local dest="$1"
+  sed "s/value = 'nostalgia2812'/value = '$USERNAME'/" "$DASHBOARD" > "$dest"
+}
+
+# ── Persist env ───────────────────────────────────────────────────────────────
+save_env() {
+  cat > "$ENV_FILE" <<EOF
+GHOST_MODE=$MODE
+GHOST_PORT=$PORT
+GHOST_USERNAME=$USERNAME
+GHOST_SERVICE_NAME=$SERVICE_NAME
+GHOST_DEPLOY_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+EOF
+}
+
+load_env() {
+  [[ -f "$ENV_FILE" ]] && source "$ENV_FILE" 2>/dev/null || true
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MODE: local
+# ══════════════════════════════════════════════════════════════════════════════
+mode_local() {
+  hdr "Local deployment"
+  check_dashboard
+  check_port
+
+  if port_in_use; then
+    die "Port $PORT is already in use. Choose another with --port."
+  fi
+
+  mkdir -p "$LOG_DIR"
+
+  # Build patched dashboard in a temp dir that persists for daemon
+  local SERVE_DIR
+  SERVE_DIR="$(mktemp -d)"
+
+  patch_dashboard "$SERVE_DIR/dashboard.html"
+  ok "Dashboard patched → $SERVE_DIR/dashboard.html"
+
+  # Find a server binary
+  local SERVER_CMD
+  if command -v python3 &>/dev/null; then
+    SERVER_CMD="python3 -m http.server $PORT --directory $SERVE_DIR"
+  elif command -v python &>/dev/null; then
+    SERVER_CMD="bash -c 'cd $SERVE_DIR && python -m SimpleHTTPServer $PORT'"
+  elif command -v npx &>/dev/null; then
+    SERVER_CMD="npx --yes serve -l $PORT $SERVE_DIR"
+  else
+    die "No HTTP server found (need python3, python, or npx)"
+  fi
+
+  local URL="http://localhost:$PORT/dashboard.html"
+
+  if $BG; then
+    hdr "Starting background daemon"
+    eval "$SERVER_CMD" >> "$LOG_FILE" 2>&1 &
+    echo $! > "$PID_FILE"
+    save_env
+    ok "Daemon started  PID=$(cat "$PID_FILE")"
+    ok "URL: $URL"
+    ok "Logs: $LOG_FILE"
+    ok "Stop: ./ghost-deploy stop"
+    # best-effort browser open
+    { sleep 1; open_browser "$URL"; } &
+  else
+    hdr "Starting foreground server"
+    log "URL: $URL"
+    log "Press Ctrl+C to stop."
+    { sleep 0.8; open_browser "$URL"; } &
+    trap 'rm -rf "$SERVE_DIR"' EXIT
+    eval "$SERVER_CMD"
+  fi
+}
+
+open_browser() {
+  local url="$1"
+  if command -v xdg-open &>/dev/null; then
+    xdg-open "$url" &>/dev/null &
+  elif command -v open &>/dev/null; then
+    open "$url" &>/dev/null &
+  fi
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MODE: docker
+# ══════════════════════════════════════════════════════════════════════════════
+mode_docker() {
+  hdr "Docker deployment"
+  require_cmd docker
+  check_dashboard
+  check_port
+
+  local BUILD_DIR
+  BUILD_DIR="$(mktemp -d)"
+  trap 'rm -rf "$BUILD_DIR"' EXIT
+
+  patch_dashboard "$BUILD_DIR/dashboard.html"
+
+  # Generate Dockerfile
+  cat > "$BUILD_DIR/Dockerfile" <<'DOCKERFILE'
+FROM nginx:1.25-alpine
+
+# Remove default nginx content
+RUN rm -rf /usr/share/nginx/html/*
+
+# Copy dashboard
+COPY dashboard.html /usr/share/nginx/html/index.html
+COPY dashboard.html /usr/share/nginx/html/dashboard.html
+
+# Lean nginx config
+RUN printf 'server {\n\
+    listen 80;\n\
+    server_name localhost;\n\
+    root /usr/share/nginx/html;\n\
+    index index.html;\n\
+    location / {\n\
+        add_header Cache-Control "no-cache";\n\
+        try_files $uri $uri/ /index.html;\n\
+    }\n\
+    location /health {\n\
+        access_log off;\n\
+        return 200 "ok";\n\
+        add_header Content-Type text/plain;\n\
+    }\n\
+}\n' > /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD curl -fs http://localhost/health || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]
+DOCKERFILE
+
+  ok "Dockerfile generated"
+
+  # Build image
+  hdr "Building Docker image: $DOCKER_IMAGE"
+  docker build -t "$DOCKER_IMAGE" "$BUILD_DIR"
+  ok "Image built: $DOCKER_IMAGE"
+
+  # Stop any existing container
+  if docker ps -q --filter "name=$SERVICE_NAME" | grep -q .; then
+    warn "Stopping existing container: $SERVICE_NAME"
+    docker stop "$SERVICE_NAME" && docker rm "$SERVICE_NAME"
+  fi
+
+  # Run container
+  hdr "Starting container: $SERVICE_NAME"
+  docker run -d \
+    --name "$SERVICE_NAME" \
+    --restart unless-stopped \
+    -p "${PORT}:80" \
+    --label "ghost.deploy=true" \
+    --label "ghost.username=$USERNAME" \
+    --label "ghost.port=$PORT" \
+    "$DOCKER_IMAGE"
+
+  save_env
+
+  local URL="http://localhost:$PORT/dashboard.html"
+  ok "Container running: $SERVICE_NAME"
+  ok "URL: $URL"
+  ok "Stop: ./ghost-deploy stop"
+  ok "Logs: ./ghost-deploy logs"
+  ok "Status: ./ghost-deploy status"
+  { sleep 1; open_browser "$URL"; } &
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MODE: systemd
+# ══════════════════════════════════════════════════════════════════════════════
+mode_systemd() {
+  hdr "Systemd service deployment"
+
+  if [[ "$EUID" -ne 0 ]]; then
+    # Try user-level systemd
+    local SYSTEMD_DIR="$HOME/.config/systemd/user"
+    local USE_USER=true
+  else
+    local SYSTEMD_DIR="/etc/systemd/system"
+    local USE_USER=false
+  fi
+
+  check_dashboard
+  check_port
+
+  # Build a static serve directory that persists
+  local SERVE_DIR="$LOG_DIR/serve"
+  mkdir -p "$SERVE_DIR" "$LOG_DIR"
+  patch_dashboard "$SERVE_DIR/dashboard.html"
+  ok "Dashboard patched → $SERVE_DIR/dashboard.html"
+
+  # Find server binary path
+  local SERVER_BIN
+  if command -v python3 &>/dev/null; then
+    SERVER_BIN="$(command -v python3)"
+    local EXEC_START="$SERVER_BIN -m http.server $PORT --directory $SERVE_DIR"
+  elif command -v python &>/dev/null; then
+    SERVER_BIN="$(command -v python)"
+    local EXEC_START="bash -c 'cd $SERVE_DIR && $SERVER_BIN -m SimpleHTTPServer $PORT'"
+  else
+    die "python3 or python required for systemd mode"
+  fi
+
+  local SERVICE_FILE="$SYSTEMD_DIR/${SERVICE_NAME}.service"
+  mkdir -p "$SYSTEMD_DIR"
+
+  # Write service unit
+  cat > "$SERVICE_FILE" <<EOF
+[Unit]
+Description=GHOST GitHub Library Dashboard
+Documentation=https://github.com/nostalgia2812/.github
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$EXEC_START
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:$LOG_FILE
+StandardError=append:$LOG_FILE
+Environment=PORT=$PORT
+WorkingDirectory=$GHOST_DIR
+
+[Install]
+WantedBy=default.target
+EOF
+
+  ok "Service unit written: $SERVICE_FILE"
+
+  if $USE_USER; then
+    systemctl --user daemon-reload
+    systemctl --user enable "$SERVICE_NAME"
+    systemctl --user restart "$SERVICE_NAME"
+    ok "Systemd user service enabled + started"
+    log "Check: systemctl --user status $SERVICE_NAME"
+  else
+    systemctl daemon-reload
+    systemctl enable "$SERVICE_NAME"
+    systemctl restart "$SERVICE_NAME"
+    ok "Systemd system service enabled + started"
+    log "Check: systemctl status $SERVICE_NAME"
+  fi
+
+  save_env
+  ok "URL: http://localhost:$PORT/dashboard.html"
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MODE: pages (GitHub Pages)
+# ══════════════════════════════════════════════════════════════════════════════
+mode_pages() {
+  hdr "GitHub Pages deployment"
+  require_cmd git
+
+  # Auto-detect repo from git remote
+  if [[ -z "$GH_REPO" ]]; then
+    local REMOTE_URL
+    REMOTE_URL="$(git -C "$GHOST_DIR" remote get-url origin 2>/dev/null || true)"
+    if [[ "$REMOTE_URL" =~ github\.com[:/](.+/.+?)(\.git)?$ ]]; then
+      GH_REPO="${BASH_REMATCH[1]}"
+    else
+      die "Could not detect GitHub repo. Pass --repo owner/repo"
+    fi
+  fi
+
+  ok "Target repo: $GH_REPO  branch: $GH_PAGES_BRANCH"
+
+  local TMP_DIR
+  TMP_DIR="$(mktemp -d)"
+  trap 'rm -rf "$TMP_DIR"' EXIT
+
+  # Prepare pages content
+  local PAGES_DIR="$TMP_DIR/pages"
+  mkdir -p "$PAGES_DIR"
+
+  patch_dashboard "$PAGES_DIR/index.html"
+  cp "$PAGES_DIR/index.html" "$PAGES_DIR/dashboard.html"
+
+  # Create a minimal 404 redirect page
+  cat > "$PAGES_DIR/404.html" <<'HTML'
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<script>window.location.replace('/dashboard.html');</script>
+</head><body>Redirecting…</body></html>
+HTML
+
+  # Create a .nojekyll to prevent Jekyll processing
+  touch "$PAGES_DIR/.nojekyll"
+
+  # Init a bare git repo and push to gh-pages branch
+  git -C "$PAGES_DIR" init -b "$GH_PAGES_BRANCH"
+  git -C "$PAGES_DIR" add -A
+  git -C "$PAGES_DIR" \
+      -c user.name="ghost-deploy" \
+      -c user.email="ghost-deploy@users.noreply.github.com" \
+      commit -m "deploy: GHOST dashboard $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  local PUSH_URL
+  if command -v gh &>/dev/null; then
+    PUSH_URL="https://github.com/${GH_REPO}.git"
+  else
+    PUSH_URL="git@github.com:${GH_REPO}.git"
+  fi
+
+  hdr "Pushing to $PUSH_URL ($GH_PAGES_BRANCH)"
+  git -C "$PAGES_DIR" remote add origin "$PUSH_URL"
+  git -C "$PAGES_DIR" push -f origin "$GH_PAGES_BRANCH"
+
+  local OWNER="${GH_REPO%%/*}"
+  local REPO_NAME="${GH_REPO##*/}"
+  ok "Deployed! Pages URL (may take ~30s to update):"
+  ok "https://${OWNER}.github.io/${REPO_NAME}/dashboard.html"
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MODE: stop
+# ══════════════════════════════════════════════════════════════════════════════
+mode_stop() {
+  hdr "Stopping GHOST deployment"
+  load_env
+
+  local stopped=false
+
+  # Stop background PID
+  if [[ -f "$PID_FILE" ]]; then
+    local PID
+    PID="$(cat "$PID_FILE")"
+    if kill -0 "$PID" 2>/dev/null; then
+      kill "$PID" && ok "Killed background process PID=$PID"
+      stopped=true
+    fi
+    rm -f "$PID_FILE"
+  fi
+
+  # Stop Docker container
+  if command -v docker &>/dev/null && docker ps -q --filter "name=$SERVICE_NAME" | grep -q .; then
+    docker stop "$SERVICE_NAME" && docker rm "$SERVICE_NAME"
+    ok "Stopped Docker container: $SERVICE_NAME"
+    stopped=true
+  fi
+
+  # Stop systemd service (user)
+  if systemctl --user is-active "$SERVICE_NAME" &>/dev/null 2>&1; then
+    systemctl --user stop "$SERVICE_NAME"
+    ok "Stopped systemd user service: $SERVICE_NAME"
+    stopped=true
+  fi
+
+  # Stop systemd service (system, needs root)
+  if [[ "$EUID" -eq 0 ]] && systemctl is-active "$SERVICE_NAME" &>/dev/null 2>&1; then
+    systemctl stop "$SERVICE_NAME"
+    ok "Stopped systemd system service: $SERVICE_NAME"
+    stopped=true
+  fi
+
+  $stopped || warn "No running GHOST deployment found."
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MODE: status
+# ══════════════════════════════════════════════════════════════════════════════
+mode_status() {
+  hdr "GHOST Deployment Status"
+  load_env
+
+  echo ""
+  echo -e "  ${BOLD}Files${RESET}"
+  [[ -f "$DASHBOARD"   ]] && ok "dashboard.html   : $DASHBOARD"   || warn "dashboard.html   : NOT FOUND"
+  [[ -f "$GHOST_START" ]] && ok "ghost-start      : $GHOST_START" || warn "ghost-start      : NOT FOUND"
+  echo ""
+
+  if [[ -n "${GHOST_DEPLOY_TIME:-}" ]]; then
+    echo -e "  ${BOLD}Last Deployment${RESET}"
+    echo "    Mode     : ${GHOST_MODE:-?}"
+    echo "    Port     : ${GHOST_PORT:-?}"
+    echo "    Username : ${GHOST_USERNAME:-?}"
+    echo "    Time     : ${GHOST_DEPLOY_TIME:-?}"
+    echo ""
+  fi
+
+  echo -e "  ${BOLD}Processes${RESET}"
+
+  # PID file
+  if [[ -f "$PID_FILE" ]]; then
+    local PID
+    PID="$(cat "$PID_FILE")"
+    if kill -0 "$PID" 2>/dev/null; then
+      ok "Background daemon running  PID=$PID"
+    else
+      warn "Stale PID file (process $PID not running)"
+    fi
+  fi
+
+  # Docker
+  if command -v docker &>/dev/null; then
+    if docker ps --filter "name=$SERVICE_NAME" --format '{{.Names}}' | grep -q "$SERVICE_NAME"; then
+      local CSTATUS
+      CSTATUS="$(docker inspect --format '{{.State.Status}}' "$SERVICE_NAME" 2>/dev/null)"
+      ok "Docker container: $SERVICE_NAME  [$CSTATUS]"
+      echo "    Image : $(docker inspect --format '{{.Config.Image}}' "$SERVICE_NAME" 2>/dev/null)"
+      echo "    Ports : $(docker inspect --format '{{range $p,$c := .NetworkSettings.Ports}}{{$p}} -> {{(index $c 0).HostPort}} {{end}}' "$SERVICE_NAME" 2>/dev/null)"
+    else
+      warn "Docker container: $SERVICE_NAME — not running"
+    fi
+  fi
+
+  # Systemd user
+  if systemctl --user is-active "$SERVICE_NAME" &>/dev/null 2>&1; then
+    ok "Systemd user service: $SERVICE_NAME — active"
+  fi
+
+  # Port check
+  echo ""
+  echo -e "  ${BOLD}Network${RESET}"
+  local CHECK_PORT="${GHOST_PORT:-$PORT}"
+  if port_in_use; then
+    ok "Port $CHECK_PORT is in use (something is listening)"
+    echo "    URL: http://localhost:$CHECK_PORT/dashboard.html"
+  else
+    warn "Port $CHECK_PORT is not listening"
+  fi
+  echo ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MODE: logs
+# ══════════════════════════════════════════════════════════════════════════════
+mode_logs() {
+  hdr "GHOST Logs"
+  load_env
+
+  local MODE_USED="${GHOST_MODE:-$MODE}"
+
+  # Docker logs
+  if command -v docker &>/dev/null && docker ps -q --filter "name=$SERVICE_NAME" | grep -q .; then
+    log "Tailing Docker logs for $SERVICE_NAME (Ctrl+C to stop)…"
+    docker logs -f --tail 100 "$SERVICE_NAME"
+    return
+  fi
+
+  # Systemd logs
+  if systemctl --user is-active "$SERVICE_NAME" &>/dev/null 2>&1; then
+    log "Tailing systemd user journal for $SERVICE_NAME (Ctrl+C to stop)…"
+    journalctl --user -u "$SERVICE_NAME" -f -n 100
+    return
+  fi
+
+  # File log
+  if [[ -f "$LOG_FILE" ]]; then
+    log "Tailing $LOG_FILE (Ctrl+C to stop)…"
+    tail -f -n 100 "$LOG_FILE"
+    return
+  fi
+
+  warn "No log source found. Start a deployment first."
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MODE: uninstall
+# ══════════════════════════════════════════════════════════════════════════════
+mode_uninstall() {
+  hdr "Uninstalling GHOST deployment"
+  load_env
+
+  # Stop everything first
+  mode_stop 2>/dev/null || true
+
+  # Remove systemd unit
+  local USER_SVC="$HOME/.config/systemd/user/${SERVICE_NAME}.service"
+  local SYS_SVC="/etc/systemd/system/${SERVICE_NAME}.service"
+
+  if [[ -f "$USER_SVC" ]]; then
+    systemctl --user disable "$SERVICE_NAME" 2>/dev/null || true
+    rm -f "$USER_SVC"
+    systemctl --user daemon-reload
+    ok "Removed systemd user service"
+  fi
+
+  if [[ -f "$SYS_SVC" && "$EUID" -eq 0 ]]; then
+    systemctl disable "$SERVICE_NAME" 2>/dev/null || true
+    rm -f "$SYS_SVC"
+    systemctl daemon-reload
+    ok "Removed systemd system service"
+  fi
+
+  # Remove Docker image
+  if command -v docker &>/dev/null; then
+    if docker images -q "$DOCKER_IMAGE" | grep -q .; then
+      docker rmi "$DOCKER_IMAGE" 2>/dev/null && ok "Removed Docker image: $DOCKER_IMAGE"
+    fi
+  fi
+
+  # Remove log/data dir
+  if [[ -d "$LOG_DIR" ]]; then
+    rm -rf "$LOG_DIR"
+    ok "Removed data dir: $LOG_DIR"
+  fi
+
+  # Remove env file
+  rm -f "$ENV_FILE"
+  ok "GHOST deployment fully removed."
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DISPATCH
+# ══════════════════════════════════════════════════════════════════════════════
+banner
+
+case "$MODE" in
+  local)     mode_local     ;;
+  docker)    mode_docker    ;;
+  systemd)   mode_systemd   ;;
+  pages)     mode_pages     ;;
+  stop)      mode_stop      ;;
+  status)    mode_status    ;;
+  logs)      mode_logs      ;;
+  uninstall) mode_uninstall ;;
+  *)
+    error "Unknown mode: $MODE"
+    echo ""
+    echo "Available modes: local | docker | systemd | pages | stop | status | logs | uninstall"
+    echo "Usage: $(basename "$0") [mode] [--port N] [--user NAME] [--bg] [--image IMG]"
+    exit 1
+    ;;
+esac
