@@ -1,53 +1,74 @@
 #!/usr/bin/env bash
 # ══════════════════════════════════════════════════════════════════════════════
-# ghost-setup — Idempotent GHOST Environment Bootstrap
-#
-# Run this once (or re-run safely at any time) to install all tools.
+# ghost-setup — GHOST Master Deployment Script
+# Idempotent. Re-run safe. Each step is independent — one failure never
+# kills the entire chain.
 #
 # USAGE
-#   ./ghost-setup [--all] [--recon] [--web] [--symlink] [--help]
+#   ./ghost-setup [flags]
 #
 # FLAGS
-#   --all       Install everything (default)
-#   --recon     Install recon / OSINT tools only
-#   --web       Install web-dashboard tools only
-#   --symlink   Install ghost-* scripts into ~/.local/bin (adds to PATH)
-#   --update    Pull latest versions of already-installed tools
+#   (none)      Full deployment — equivalent to --all
+#   --all       Full deployment (dirs + lab + ai + recon + web + alias + symlink)
+#   --lab       System packages: nmap, aircrack-ng, kismet, wifite, bettercap,
+#               bluez, ubertooth, hackrf, gqrx-sdr (adds Kismet Noble repo)
+#   --ai        AI engines: PentestGPT venv + kimi-cli check
+#   --recon     Python OSINT tools: Sublist3r, theHarvester, dnsrecon
+#   --web       Dashboard: verify dashboard.html, ghost-start, ghost-deploy
+#   --vault     Interactive: create/replace AES-256 credential vault
+#   --alias     Inject 'ghost-start' alias into ~/.bashrc
+#   --symlink   Symlink ghost-* scripts into ~/.local/bin
+#   --update    Pull latest versions of already-installed Python tools
 #   --help      Show this help
+#
+# IMPORTANT: Only use the installed tools against systems you own or have
+#            explicit written authorisation to test.
 # ══════════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
-# ── Resolve GHOST root from this script's location ───────────────────────────
+# ── Resolve GHOST root ────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GHOST_ROOT="$SCRIPT_DIR"
 LIB="$GHOST_ROOT/lib/ghost-lib.sh"
-
-[[ -f "$LIB" ]] || { echo "[✗] lib/ghost-lib.sh not found at $LIB"; exit 1; }
+[[ -f "$LIB" ]] || { echo "[✗] lib/ghost-lib.sh not found — repo may be incomplete."; exit 1; }
 source "$LIB"
 
-# ── Flag defaults ─────────────────────────────────────────────────────────────
+# ── Extended paths for lab layout ─────────────────────────────────────────────
+AI_DIR="$GHOST_ROOT/engines/ai"
+AI_VENV="$AI_DIR/venv"
+CONF_DIR="$GHOST_ROOT/conf/profiles"
+VAULT_FILE="$GHOST_ROOT/.vault.enc"
+CACHE_LOG="$GHOST_ROOT/cache/logs/deploy.log"
+
+# ── Flags ─────────────────────────────────────────────────────────────────────
+DO_LAB=false
+DO_AI=false
 DO_RECON=false
 DO_WEB=false
+DO_VAULT=false
+DO_ALIAS=false
 DO_SYMLINK=false
 DO_UPDATE=false
 
 parse_args() {
   if [[ $# -eq 0 ]]; then
-    DO_RECON=true; DO_WEB=true; DO_SYMLINK=true
+    DO_LAB=true; DO_AI=true; DO_RECON=true
+    DO_WEB=true; DO_ALIAS=true; DO_SYMLINK=true
     return
   fi
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --all)     DO_RECON=true; DO_WEB=true; DO_SYMLINK=true ;;
+      --all)     DO_LAB=true; DO_AI=true; DO_RECON=true; DO_WEB=true; DO_ALIAS=true; DO_SYMLINK=true ;;
+      --lab)     DO_LAB=true ;;
+      --ai)      DO_AI=true ;;
       --recon)   DO_RECON=true ;;
       --web)     DO_WEB=true ;;
+      --vault)   DO_VAULT=true ;;
+      --alias)   DO_ALIAS=true ;;
       --symlink) DO_SYMLINK=true ;;
-      --update)  DO_UPDATE=true; DO_RECON=true; DO_WEB=true ;;
-      --help|-h)
-        grep '^#' "$0" | head -20 | sed 's/^# \?//'
-        exit 0
-        ;;
+      --update)  DO_UPDATE=true; DO_RECON=true; DO_AI=true ;;
+      --help|-h) grep '^#' "$0" | head -30 | sed 's/^# \?//'; exit 0 ;;
       *) warn "Unknown flag: $1" ;;
     esac
     shift
@@ -56,219 +77,421 @@ parse_args() {
 
 parse_args "$@"
 
+# ── Step runner — failure is warned, never fatal ──────────────────────────────
+STEP_ERRORS=()
+run_step() {
+  local label="$1"; shift
+  if "$@" 2>&1; then
+    return 0
+  else
+    warn "Step FAILED (non-fatal): $label"
+    STEP_ERRORS+=("$label")
+    return 0   # keep going
+  fi
+}
+
+# ── apt helper — idempotent single-package install ────────────────────────────
+apt_install() {
+  local pkg="$1"
+  if dpkg -s "$pkg" &>/dev/null 2>&1; then
+    ok "  Already installed: $pkg"
+  else
+    if sudo apt-get install -y --no-install-recommends "$pkg" &>/dev/null; then
+      ok "  Installed: $pkg"
+    else
+      warn "  apt failed: $pkg"
+      STEP_ERRORS+=("apt:$pkg")
+    fi
+  fi
+}
+
 # ══════════════════════════════════════════════════════════════════════════════
-ghost_banner "Setup & Bootstrap"
+ghost_banner "Master Deployment"
+mkdir -p "$(dirname "$CACHE_LOG")"
+echo "=== GHOST Deploy — $(date) ===" >> "$CACHE_LOG"
 log "GHOST root : $GHOST_ROOT"
-log "Date       : $(date)"
+log "Log        : $CACHE_LOG"
 echo ""
 
-# ── Create standard directory tree ───────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 0 — Directory tree (always runs)
+# ══════════════════════════════════════════════════════════════════════════════
 hdr "Directory structure"
 ghost_init_dirs
-ok "Directory tree ready"
-log "  $GHOST_ROOT/"
-log "  ├── src/recon/"
-log "  ├── src/exploit/"
-log "  ├── src/web/"
-log "  ├── tmp/data/"
-log "  ├── tmp/logs/"
-log "  └── lib/"
+mkdir -p \
+  "$AI_DIR" \
+  "$CONF_DIR" \
+  "$GHOST_ROOT/bin" \
+  "$GHOST_ROOT/cache/logs" \
+  "$GHOST_ROOT/engines" \
+  "$GHOST_ROOT/net/pkt" \
+  "$GHOST_ROOT/dev/bt" \
+  "$GHOST_ROOT/sdr/raw" \
+  "$GHOST_ROOT/src/wifi" \
+  "$GHOST_ROOT/src/ble" \
+  "$GHOST_ROOT/src/sdr" \
+  "$GHOST_ROOT/workspace"
+ok "Full directory tree ready"
 
-# ── System prerequisites ──────────────────────────────────────────────────────
-hdr "System prerequisites"
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 1 — Lab system packages (needs sudo)
+# ══════════════════════════════════════════════════════════════════════════════
+if $DO_LAB; then
+  hdr "Lab system packages"
 
-MISSING=()
-for cmd in git python3 pip3 curl; do
-  if has_cmd "$cmd"; then
-    ok "$cmd"
+  if ! has_cmd sudo; then
+    warn "sudo not found — skipping system package installation"
   else
-    warn "$cmd — NOT FOUND"
-    MISSING+=("$cmd")
-  fi
-done
+    # ── Kismet official repo for Ubuntu Noble (24.04) ─────────────────────
+    step "Adding Kismet official repo (Ubuntu Noble)"
+    if ! grep -r "kismetwireless" /etc/apt/sources.list.d/ &>/dev/null 2>&1; then
+      run_step "kismet-repo" bash -c '
+        wget -q -O - https://www.kismetwireless.net/repos/kismet-release.gpg.key \
+          | gpg --dearmor \
+          | sudo tee /usr/share/keyrings/kismet-archive-keyring.gpg > /dev/null
+        echo "deb [signed-by=/usr/share/keyrings/kismet-archive-keyring.gpg] \
+          https://www.kismetwireless.net/repos/apt/release/noble noble main" \
+          | sudo tee /etc/apt/sources.list.d/kismet.list > /dev/null
+      '
+      ok "Kismet repo added"
+    else
+      ok "Kismet repo already configured"
+    fi
 
-if [[ ${#MISSING[@]} -gt 0 ]]; then
-  echo ""
-  warn "Missing prerequisites: ${MISSING[*]}"
-  log "On Debian/Ubuntu:  sudo apt-get install -y git python3 python3-pip curl"
-  log "On Fedora/RHEL:    sudo dnf install -y git python3 python3-pip curl"
-  log "On macOS:          brew install python git curl"
-  echo ""
-  # Don't exit — partial install is fine
+    # ── apt update ────────────────────────────────────────────────────────
+    step "Updating apt cache"
+    sudo apt-get update -qq 2>&1 | tail -3 || warn "apt update had warnings (continuing)"
+
+    # ── Core build tools ──────────────────────────────────────────────────
+    step "Core build tools"
+    for pkg in python3 python3-pip python3-venv python3-dev \
+                git curl wget build-essential \
+                libssl-dev libffi-dev pkg-config libusb-1.0-0-dev \
+                libsqlite3-dev openssl npm; do
+      apt_install "$pkg"
+    done
+
+    # ── Network / pentest tools ───────────────────────────────────────────
+    step "Network & pentest tools"
+    for pkg in nmap aircrack-ng kismet wifite bettercap; do
+      apt_install "$pkg"
+    done
+
+    # ── Bluetooth tools ───────────────────────────────────────────────────
+    step "Bluetooth tools"
+    for pkg in bluez bluez-tools ubertooth; do
+      apt_install "$pkg"
+    done
+
+    # ── SDR tools ─────────────────────────────────────────────────────────
+    step "SDR tools"
+    for pkg in hackrf gqrx-sdr; do
+      apt_install "$pkg"
+    done
+
+    ok "System packages complete"
+  fi
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-# RECON TOOLS
+# STEP 2 — AI Engines
 # ══════════════════════════════════════════════════════════════════════════════
-if $DO_RECON; then
-  hdr "Recon / OSINT tools"
+if $DO_AI; then
+  hdr "AI engines"
 
-  # ── Sublist3r ──────────────────────────────────────────────────────────────
-  step "Sublist3r (subdomain enumeration)"
-  SUBLIST3R_DIR="$GHOST_RECON/Sublist3r"
+  # ── PentestGPT ────────────────────────────────────────────────────────────
+  step "PentestGPT (AI-guided pentesting framework)"
+  PENTESTGPT_REPO="https://github.com/GreyDGL/PentestGPT.git"
 
-  ghost_clone "https://github.com/aboul3la/Sublist3r.git" "$SUBLIST3R_DIR"
+  ghost_clone "$PENTESTGPT_REPO" "$AI_DIR"
 
-  # Verify entry script (handles any capitalisation)
-  SUBLIST3R_PY=""
-  for candidate in sublist3r.py Sublist3r.py main.py; do
-    if [[ -f "$SUBLIST3R_DIR/$candidate" ]]; then
-      SUBLIST3R_PY="$SUBLIST3R_DIR/$candidate"
+  # ── Python venv ───────────────────────────────────────────────────────────
+  if [[ ! -d "$AI_VENV" ]]; then
+    log "Creating isolated Python venv at $AI_VENV"
+    python3 -m venv "$AI_VENV" && ok "venv created"
+  else
+    ok "venv already exists: $AI_VENV"
+  fi
+
+  # Activate venv
+  source "$AI_VENV/bin/activate"
+
+  pip install --upgrade pip --quiet
+
+  # ── Install PentestGPT requirements ──────────────────────────────────────
+  for reqfile in \
+      "$AI_DIR/requirements.txt" \
+      "$AI_DIR/requirements/base.txt" \
+      "$AI_DIR/requirements/requirements.txt"; do
+    if [[ -f "$reqfile" ]]; then
+      log "Installing from $reqfile"
+      # Filter out packages known to not exist on PyPI
+      grep -v "hexstrike-ai" "$reqfile" > /tmp/ghost_reqs_filtered.txt || true
+      if pip install --quiet -r /tmp/ghost_reqs_filtered.txt; then
+        ok "PentestGPT dependencies installed"
+      else
+        warn "Some dependencies failed — pentestgpt may have partial functionality"
+      fi
       break
     fi
   done
 
-  if [[ -z "$SUBLIST3R_PY" ]]; then
-    warn "sublist3r.py not found after clone — listing dir:"
-    ls "$SUBLIST3R_DIR/" 2>/dev/null || true
-    warn "Skipping Sublist3r pip install"
-  else
-    ok "Entry script: $SUBLIST3R_PY"
-    if [[ -f "$SUBLIST3R_DIR/requirements.txt" ]]; then
-      log "Installing Sublist3r Python dependencies…"
-      ghost_pip_install "$SUBLIST3R_DIR/requirements.txt" \
-        && ok "Sublist3r dependencies installed"
-    fi
+  # Make sure pentestgpt itself is installed
+  if ! "$AI_VENV/bin/pip" show pentestgpt &>/dev/null 2>&1; then
+    log "Installing pentestgpt package..."
+    pip install --quiet pentestgpt 2>/dev/null \
+      && ok "pentestgpt installed from PyPI" \
+      || warn "pentestgpt PyPI install failed — use venv-local version"
+  fi
 
-    # Write a wrapper so it's callable without cd
-    SUBLIST3R_WRAPPER="$GHOST_ROOT/bin/sublist3r"
-    mkdir -p "$GHOST_ROOT/bin"
-    cat > "$SUBLIST3R_WRAPPER" <<WRAP
+  deactivate 2>/dev/null || true
+
+  # Write venv-aware wrapper for pentestgpt
+  cat > "$GHOST_ROOT/bin/pentestgpt-ghost" <<WRAP
 #!/usr/bin/env bash
-# Auto-generated by ghost-setup — do not edit manually
+# GHOST wrapper for pentestgpt — activates the correct venv automatically
+source "$AI_VENV/bin/activate"
+exec pentestgpt "\$@"
+WRAP
+  chmod +x "$GHOST_ROOT/bin/pentestgpt-ghost"
+  ok "Wrapper: $GHOST_ROOT/bin/pentestgpt-ghost"
+
+  # ── kimi-cli ──────────────────────────────────────────────────────────────
+  step "kimi-cli (Moonshot AI agent)"
+  if has_cmd kimi || has_cmd kimi-cli; then
+    ok "kimi-cli already installed: $(command -v kimi 2>/dev/null || command -v kimi-cli)"
+  else
+    log "Installing kimi-cli via code.kimi.com..."
+    if has_cmd curl; then
+      if curl -fsSL code.kimi.com/install.sh | bash; then
+        ok "kimi-cli installed"
+      else
+        warn "kimi-cli install failed — install manually: curl -L code.kimi.com/install.sh | bash"
+      fi
+    else
+      warn "curl not found — cannot install kimi-cli automatically"
+    fi
+  fi
+
+  # Write kimi wrapper in GHOST bin
+  if has_cmd kimi; then
+    KIMI_BIN="$(command -v kimi)"
+    cat > "$GHOST_ROOT/bin/ghost-kimi" <<WRAP
+#!/usr/bin/env bash
+# GHOST wrapper for kimi
+exec "$KIMI_BIN" "\$@"
+WRAP
+    chmod +x "$GHOST_ROOT/bin/ghost-kimi"
+    ok "kimi wrapper: $GHOST_ROOT/bin/ghost-kimi"
+  fi
+
+  ok "AI engines ready"
+fi
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 3 — Python OSINT / Recon tools
+# ══════════════════════════════════════════════════════════════════════════════
+if $DO_RECON; then
+  hdr "Python OSINT / Recon tools"
+
+  # ── Sublist3r ──────────────────────────────────────────────────────────────
+  step "Sublist3r"
+  SUBLIST3R_DIR="$GHOST_RECON/Sublist3r"
+  run_step "sublist3r-clone" ghost_clone "https://github.com/aboul3la/Sublist3r.git" "$SUBLIST3R_DIR"
+  SUBLIST3R_PY=""
+  for c in sublist3r.py Sublist3r.py main.py; do
+    [[ -f "$SUBLIST3R_DIR/$c" ]] && { SUBLIST3R_PY="$SUBLIST3R_DIR/$c"; break; }
+  done
+  if [[ -n "$SUBLIST3R_PY" ]]; then
+    [[ -f "$SUBLIST3R_DIR/requirements.txt" ]] \
+      && run_step "sublist3r-deps" ghost_pip_install "$SUBLIST3R_DIR/requirements.txt"
+    cat > "$GHOST_ROOT/bin/sublist3r" <<WRAP
+#!/usr/bin/env bash
 exec python3 "$SUBLIST3R_PY" "\$@"
 WRAP
-    chmod +x "$SUBLIST3R_WRAPPER"
-    ok "Wrapper: $SUBLIST3R_WRAPPER"
+    chmod +x "$GHOST_ROOT/bin/sublist3r"
+    ok "sublist3r ready  ($SUBLIST3R_PY)"
+  else
+    warn "sublist3r.py not found in $SUBLIST3R_DIR"
   fi
 
   # ── theHarvester ──────────────────────────────────────────────────────────
-  step "theHarvester (email / host enumeration)"
+  step "theHarvester"
   HARVESTER_DIR="$GHOST_RECON/theHarvester"
-  ghost_clone "https://github.com/laramies/theHarvester.git" "$HARVESTER_DIR"
-  if [[ -f "$HARVESTER_DIR/requirements/base.txt" ]]; then
-    ghost_pip_install "$HARVESTER_DIR/requirements/base.txt" \
-      && ok "theHarvester dependencies installed"
-  elif [[ -f "$HARVESTER_DIR/requirements.txt" ]]; then
-    ghost_pip_install "$HARVESTER_DIR/requirements.txt" \
-      && ok "theHarvester dependencies installed"
-  fi
-
-  HARVESTER_WRAPPER="$GHOST_ROOT/bin/theharvester"
-  mkdir -p "$GHOST_ROOT/bin"
-  cat > "$HARVESTER_WRAPPER" <<WRAP
+  run_step "harvester-clone" ghost_clone "https://github.com/laramies/theHarvester.git" "$HARVESTER_DIR"
+  for rfile in "$HARVESTER_DIR/requirements/base.txt" "$HARVESTER_DIR/requirements.txt"; do
+    [[ -f "$rfile" ]] && { run_step "harvester-deps" ghost_pip_install "$rfile"; break; }
+  done
+  [[ -f "$HARVESTER_DIR/theHarvester.py" ]] && {
+    cat > "$GHOST_ROOT/bin/theharvester" <<WRAP
 #!/usr/bin/env bash
-# Auto-generated by ghost-setup
 exec python3 "$HARVESTER_DIR/theHarvester.py" "\$@"
 WRAP
-  chmod +x "$HARVESTER_WRAPPER"
-  ok "Wrapper: $HARVESTER_WRAPPER"
+    chmod +x "$GHOST_ROOT/bin/theharvester"
+    ok "theHarvester ready"
+  }
 
-  # ── DNSrecon ──────────────────────────────────────────────────────────────
-  step "dnsrecon (DNS reconnaissance)"
+  # ── dnsrecon ──────────────────────────────────────────────────────────────
+  step "dnsrecon"
   DNSRECON_DIR="$GHOST_RECON/dnsrecon"
-  ghost_clone "https://github.com/darkoperator/dnsrecon.git" "$DNSRECON_DIR"
-  if [[ -f "$DNSRECON_DIR/requirements.txt" ]]; then
-    ghost_pip_install "$DNSRECON_DIR/requirements.txt" \
-      && ok "dnsrecon dependencies installed"
-  fi
-
-  DNSRECON_WRAPPER="$GHOST_ROOT/bin/dnsrecon"
-  cat > "$DNSRECON_WRAPPER" <<WRAP
+  run_step "dnsrecon-clone" ghost_clone "https://github.com/darkoperator/dnsrecon.git" "$DNSRECON_DIR"
+  [[ -f "$DNSRECON_DIR/requirements.txt" ]] \
+    && run_step "dnsrecon-deps" ghost_pip_install "$DNSRECON_DIR/requirements.txt"
+  [[ -f "$DNSRECON_DIR/dnsrecon.py" ]] && {
+    cat > "$GHOST_ROOT/bin/dnsrecon" <<WRAP
 #!/usr/bin/env bash
 exec python3 "$DNSRECON_DIR/dnsrecon.py" "\$@"
 WRAP
-  chmod +x "$DNSRECON_WRAPPER"
-  ok "Wrapper: $DNSRECON_WRAPPER"
+    chmod +x "$GHOST_ROOT/bin/dnsrecon"
+    ok "dnsrecon ready"
+  }
+
+  ok "Recon tools complete"
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-# WEB / DASHBOARD TOOLS
+# STEP 4 — Web dashboard
 # ══════════════════════════════════════════════════════════════════════════════
 if $DO_WEB; then
-  hdr "Web / Dashboard tools"
+  hdr "Web dashboard"
+  [[ -f "$GHOST_ROOT/dashboard.html" ]] && ok "dashboard.html present" \
+    || warn "dashboard.html missing — check repo checkout"
+  for s in ghost-start ghost-deploy ghost-vault.sh; do
+    [[ -f "$GHOST_ROOT/$s" ]] && { chmod +x "$GHOST_ROOT/$s"; ok "$s executable"; } \
+      || warn "$s missing"
+  done
+fi
 
-  step "Verifying dashboard.html"
-  if [[ -f "$GHOST_ROOT/dashboard.html" ]]; then
-    ok "dashboard.html present"
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 5 — Stealth prompt template
+# ══════════════════════════════════════════════════════════════════════════════
+hdr "Stealth prompt template"
+if [[ ! -f "$CONF_DIR/stealth_prompt.txt" ]]; then
+  cat > "$CONF_DIR/stealth_prompt.txt" <<'PROMPT'
+You are GHOST, an expert penetration testing AI assistant operating within
+an authorised red-team engagement. Assist with reconnaissance, vulnerability
+analysis, exploit planning, and remediation advice. Always confirm scope
+before suggesting active exploitation techniques. Responses should be
+precise, actionable, and security-professional in tone.
+
+Current engagement context:
+  Framework : GHOST Pentest Suite
+  Operator  : [SET OPERATOR NAME]
+  Scope     : [SET AUTHORISED TARGETS]
+  Rules     : No out-of-scope targets. Document all findings.
+PROMPT
+  ok "Stealth prompt written: $CONF_DIR/stealth_prompt.txt"
+else
+  ok "Stealth prompt already exists"
+fi
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 6 — AES-256 Vault (interactive, only when --vault passed)
+# ══════════════════════════════════════════════════════════════════════════════
+if $DO_VAULT; then
+  hdr "AES-256 Credential Vault"
+
+  if ! has_cmd openssl; then
+    warn "openssl not found — cannot create vault"
   else
-    warn "dashboard.html not found at $GHOST_ROOT/dashboard.html"
-  fi
+    info "Enter your AI API Key (OpenAI / Google Gemini / Kimi — input hidden):"
+    read -rs -p "[>] API Key: " GHOST_API_KEY_INPUT; echo ""
 
-  step "Verifying ghost-start"
-  if [[ -f "$GHOST_ROOT/ghost-start" ]]; then
-    chmod +x "$GHOST_ROOT/ghost-start"
-    ok "ghost-start executable"
-  fi
-
-  step "Verifying ghost-deploy"
-  if [[ -f "$GHOST_ROOT/ghost-deploy" ]]; then
-    chmod +x "$GHOST_ROOT/ghost-deploy"
-    ok "ghost-deploy executable"
+    if [[ -z "$GHOST_API_KEY_INPUT" ]]; then
+      warn "Empty key — vault creation skipped"
+    else
+      info "Create a password to lock the AES vault:"
+      echo "export GHOST_API_KEY=$GHOST_API_KEY_INPUT" \
+        | openssl enc -aes-256-cbc -pbkdf2 \
+            -out "$VAULT_FILE" \
+        && ok "Vault encrypted: $VAULT_FILE" \
+        || warn "Vault encryption failed"
+      unset GHOST_API_KEY_INPUT
+    fi
   fi
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SYMLINK INTO PATH
+# STEP 7 — Inject 'ghost-start' alias into ~/.bashrc
+# ══════════════════════════════════════════════════════════════════════════════
+if $DO_ALIAS; then
+  hdr "Shell alias"
+  BASHRC="$HOME/.bashrc"
+  ALIAS_LINE="alias ghost-start='bash $GHOST_ROOT/ghost-vault.sh'"
+
+  if grep -qF "ghost-start" "$BASHRC" 2>/dev/null; then
+    # Update to point at correct vault script (in case old deploy.sh put wrong path)
+    sed -i "s|alias ghost-start=.*|$ALIAS_LINE|g" "$BASHRC"
+    ok "ghost-start alias updated in $BASHRC"
+  else
+    echo "" >> "$BASHRC"
+    echo "# GHOST — AI pentest environment" >> "$BASHRC"
+    echo "$ALIAS_LINE" >> "$BASHRC"
+    ok "ghost-start alias injected into $BASHRC"
+  fi
+  log "Run: source ~/.bashrc   (or open a new terminal)"
+fi
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 8 — Symlink ghost-* into ~/.local/bin
 # ══════════════════════════════════════════════════════════════════════════════
 if $DO_SYMLINK; then
-  hdr "Installing GHOST scripts into PATH"
-
+  hdr "PATH symlinks → ~/.local/bin"
   LOCAL_BIN="$HOME/.local/bin"
   mkdir -p "$LOCAL_BIN"
 
-  for script in ghost-start ghost-deploy ghost-setup; do
-    local_src="$GHOST_ROOT/$script"
-    local_link="$LOCAL_BIN/$script"
-    if [[ -f "$local_src" ]]; then
-      ln -sf "$local_src" "$local_link"
-      ok "Linked: $local_link → $local_src"
-    fi
+  for script in ghost-start ghost-deploy ghost-setup ghost-vault.sh; do
+    src="$GHOST_ROOT/$script"
+    dst="$LOCAL_BIN/$script"
+    [[ -f "$src" ]] && { ln -sf "$src" "$dst"; ok "Linked: $dst"; }
   done
 
-  # Also symlink bin/ wrappers (sublist3r, theharvester, etc.)
   if [[ -d "$GHOST_ROOT/bin" ]]; then
-    for wrapper in "$GHOST_ROOT/bin/"*; do
-      local_link="$LOCAL_BIN/$(basename "$wrapper")"
-      ln -sf "$wrapper" "$local_link"
-      ok "Linked: $local_link"
+    for w in "$GHOST_ROOT/bin/"*; do
+      [[ -f "$w" ]] && { ln -sf "$w" "$LOCAL_BIN/$(basename "$w")"; ok "Linked: $LOCAL_BIN/$(basename "$w")"; }
     done
   fi
 
-  # PATH notice
   if ! echo "$PATH" | grep -q "$LOCAL_BIN"; then
-    echo ""
-    warn "$LOCAL_BIN is not in your PATH."
-    log "Add the following to your ~/.bashrc or ~/.zshrc:"
-    echo ""
+    warn "$LOCAL_BIN is not in your PATH — add to ~/.bashrc:"
     echo '    export PATH="$HOME/.local/bin:$PATH"'
-    echo ""
-    log "Then reload: source ~/.bashrc"
   else
-    ok "$LOCAL_BIN is already in PATH"
+    ok "$LOCAL_BIN is in PATH"
   fi
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SUMMARY
 # ══════════════════════════════════════════════════════════════════════════════
-hdr "Setup complete"
+hdr "Deployment complete"
 echo ""
-echo -e "  ${_BLD}Quick start:${_RST}"
-echo "    ghost-start                   # Open dashboard in browser"
-echo "    ghost-deploy local --bg       # Run dashboard as background daemon"
-echo "    ghost-deploy status           # Check deployment status"
-echo "    ghost-deploy docker           # Run in Docker container"
-echo "    ghost-deploy pages            # Deploy to GitHub Pages"
-echo ""
-if $DO_RECON; then
-  echo -e "  ${_BLD}Recon tools (after adding ~/.local/bin to PATH):${_RST}"
-  echo "    sublist3r -d example.com -o $GHOST_DATA/subs.txt"
-  echo "    theharvester -d example.com -b google"
-  echo "    dnsrecon -d example.com"
+if [[ ${#STEP_ERRORS[@]} -gt 0 ]]; then
+  warn "Non-fatal errors occurred in: ${STEP_ERRORS[*]}"
+  warn "Check $CACHE_LOG for details"
   echo ""
 fi
-echo -e "  ${_BLD}Output directory:${_RST}  $GHOST_DATA"
-echo -e "  ${_BLD}Logs directory:${_RST}    $GHOST_LOGS"
+
+echo -e "  ${_BLD}Reload shell:${_RST}    source ~/.bashrc"
 echo ""
-ok "GHOST environment ready."
+echo -e "  ${_BLD}Launch AI agent:${_RST}"
+echo "    ghost-start                          # Open secure AI session"
+echo "    ghost-vault.sh --target 192.168.1.1  # Start pentestgpt with target"
+echo "    ghost-kimi                           # Start Kimi AI session"
+echo ""
+echo -e "  ${_BLD}Recon tools:${_RST}"
+echo "    sublist3r -d example.com"
+echo "    theharvester -d example.com -b google"
+echo "    dnsrecon -d example.com"
+echo "    nmap -sV <target>"
+echo ""
+echo -e "  ${_BLD}Dashboard:${_RST}"
+echo "    ghost-deploy local --bg              # Background HTTP server"
+echo "    ghost-deploy status                  # Check what's running"
+echo "    ghost-deploy docker                  # Run in Docker"
+echo ""
+echo -e "  ${_BLD}Vault:${_RST}"
+echo "    ghost-setup --vault                  # (Re)create AES vault"
+echo ""
+echo -e "  ${_BLD}Log:${_RST}  $CACHE_LOG"
+echo ""
+ok "GHOST environment ready.  ⚡"

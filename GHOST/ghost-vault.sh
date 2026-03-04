@@ -2,77 +2,79 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # ghost-vault.sh — GHOST Secure Environment Launcher
 #
-# Decrypts the AES-256 credential vault, loads the API key into the
+# Decrypts the AES-256 credential vault, exports the API key into the
 # environment, then launches the configured AI agent session.
 #
 # USAGE
-#   ./ghost-vault.sh [--target TARGET] [--model MODEL] [--no-ai]
+#   ghost-start                                    # interactive (no target)
+#   ghost-vault.sh -t 192.168.1.1                  # pentestgpt with target
+#   ghost-vault.sh -t 192.168.1.1 -e kimi          # use kimi engine
+#   ghost-vault.sh -t 192.168.1.1 -e pentestgpt    # explicit pentestgpt
+#   ghost-vault.sh --no-ai                         # vault only, drop to shell
 #
-# NOTE: All tools (aircrack-ng, kismet, nmap, etc.) must only be used
-# against systems you own or have explicit written authorization to test.
+# OPTIONS
+#   -t | --target   TARGET   IP/hostname to test (required for pentestgpt)
+#   -e | --engine   ENGINE   AI engine: pentestgpt (default) | kimi | bash
+#   -m | --model    MODEL    Model override (e.g. gemini-2.0-flash, gpt-4o)
+#   --no-ai                  Decrypt vault and drop to interactive shell
+#   --help                   Show this help
+#
+# NOTE: Only target systems you own or have explicit written authorisation
+#       to test. Unauthorised access is illegal in most jurisdictions.
 # ══════════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
-# ── Load shared library (FIXES: ok/log/warn/error not found) ─────────────────
+# ── Load shared library — FIXES: ok/log/warn/error/hdr/die not found ─────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GHOST_ROOT="$SCRIPT_DIR"
 source "$SCRIPT_DIR/lib/ghost-lib.sh"
 
-# ── Defaults ──────────────────────────────────────────────────────────────────
+# ── Paths ─────────────────────────────────────────────────────────────────────
 VAULT_FILE="$GHOST_ROOT/.vault.enc"
-VAULT_TMP=""
-AI_TARGET=""
-AI_MODEL="${GHOST_MODEL:-gemini-2.0-flash}"
-LAUNCH_AI=true
-PENTESTGPT_DIR="$GHOST_ROOT/engines/ai"
-PENTESTGPT_VENV="$PENTESTGPT_DIR/venv"
+AI_VENV="$GHOST_ROOT/engines/ai/venv"
 CONF_DIR="$GHOST_ROOT/conf/profiles"
 STEALTH_PROMPT="$CONF_DIR/stealth_prompt.txt"
 
-# ── Parse args ────────────────────────────────────────────────────────────────
+# ── Defaults ──────────────────────────────────────────────────────────────────
+AI_TARGET=""
+AI_ENGINE="${GHOST_ENGINE:-pentestgpt}"   # pentestgpt | kimi | bash
+AI_MODEL="${GHOST_MODEL:-}"
+LAUNCH_AI=true
+VAULT_TMP=""
+
+# ── Parse arguments ───────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --target|-t)  AI_TARGET="$2";  shift 2 ;;
-    --model|-m)   AI_MODEL="$2";   shift 2 ;;
+    -t|--target)  AI_TARGET="$2";  shift 2 ;;
+    -e|--engine)  AI_ENGINE="$2";  shift 2 ;;
+    -m|--model)   AI_MODEL="$2";   shift 2 ;;
     --no-ai)      LAUNCH_AI=false; shift ;;
-    --help|-h)
-      grep '^#' "$0" | head -20 | sed 's/^# \?//'
-      exit 0
-      ;;
+    --help|-h)    grep '^#' "$0" | head -25 | sed 's/^# \?//'; exit 0 ;;
     *) warn "Unknown argument: $1"; shift ;;
   esac
 done
 
-# ── Cleanup on exit ───────────────────────────────────────────────────────────
+# ── Cleanup: scrub key material on exit ───────────────────────────────────────
 cleanup() {
-  if [[ -n "$VAULT_TMP" && -d "$VAULT_TMP" ]]; then
-    rm -rf "$VAULT_TMP"
-  fi
-  # Scrub env vars with key material
-  unset GHOST_API_KEY OPENAI_API_KEY GOOGLE_API_KEY GEMINI_API_KEY 2>/dev/null || true
+  [[ -n "$VAULT_TMP" && -d "$VAULT_TMP" ]] && rm -rf "$VAULT_TMP"
+  unset GHOST_API_KEY OPENAI_API_KEY GOOGLE_API_KEY GEMINI_API_KEY \
+        KIMI_API_KEY ANTHROPIC_API_KEY VAULT_PASS 2>/dev/null || true
   ok "Memory scrubbed. Environment secured."
 }
 trap cleanup EXIT
 
+# ══════════════════════════════════════════════════════════════════════════════
 ghost_banner "Secure Environment"
-log "Initializing GHOST Secure Environment..."
+log "Engine : $AI_ENGINE"
+[[ -n "$AI_TARGET" ]] && log "Target : $AI_TARGET" || log "Target : (not set — interactive mode)"
+echo ""
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 1 — Decrypt vault
+# PHASE 1 — Decrypt vault / load API key
 # ══════════════════════════════════════════════════════════════════════════════
-if [[ ! -f "$VAULT_FILE" ]]; then
-  warn "No vault found at $VAULT_FILE"
-  warn "Run the GHOST deploy script first to create a vault, or set GHOST_API_KEY in your env."
-  if [[ -z "${GHOST_API_KEY:-}" ]]; then
-    info "Enter API key manually (will not be saved):"
-    read -rs -p "[>] API Key: " GHOST_API_KEY
-    echo ""
-  fi
-else
-  info "Enter Vault Password:"
-  read -rs -p "[>] " VAULT_PASS
-  echo ""
+if [[ -f "$VAULT_FILE" ]]; then
+  info "Enter vault password:"
+  read -rs -p "[>] " VAULT_PASS; echo ""
 
   VAULT_TMP="$(mktemp -d)"
   VAULT_OUT="$VAULT_TMP/vault.txt"
@@ -83,93 +85,145 @@ else
         -out "$VAULT_OUT" 2>/dev/null; then
     die "Vault decryption failed — wrong password or corrupted vault"
   fi
+  unset VAULT_PASS
 
-  # Source exported vars (e.g. export GHOST_API_KEY=...)
   set -o allexport
   source "$VAULT_OUT" 2>/dev/null || true
   set +o allexport
 
-  unset VAULT_PASS
   rm -f "$VAULT_OUT"
+  ok "Vault decrypted."
+
+elif [[ -n "${GHOST_API_KEY:-}" ]]; then
+  ok "Using GHOST_API_KEY from environment (no vault)"
+
+else
+  warn "No vault at $VAULT_FILE and GHOST_API_KEY not set."
+  warn "Run: ghost-setup --vault   to create the vault."
+  info "Continuing without API key — some features unavailable."
 fi
 
-ok "Vault decrypted."
-
-# ══════════════════════════════════════════════════════════════════════════════
-# STEP 2 — Map the key to whatever env var the AI tool expects
-# ══════════════════════════════════════════════════════════════════════════════
-# Support multiple key names written by different deploy scripts
-for kvar in GHOST_API_KEY OPENAI_API_KEY GOOGLE_API_KEY GEMINI_API_KEY; do
-  if [[ -n "${!kvar:-}" ]]; then
-    # Export all common aliases so any AI tool finds its key
-    export OPENAI_API_KEY="${!kvar}"
-    export GOOGLE_API_KEY="${!kvar}"
-    export GEMINI_API_KEY="${!kvar}"
-    export GHOST_API_KEY="${!kvar}"
-    break
-  fi
+# ── Propagate key to all known env var names ──────────────────────────────────
+_KEY=""
+for kvar in GHOST_API_KEY OPENAI_API_KEY GOOGLE_API_KEY GEMINI_API_KEY KIMI_API_KEY ANTHROPIC_API_KEY; do
+  [[ -n "${!kvar:-}" ]] && { _KEY="${!kvar}"; break; }
 done
 
+if [[ -n "$_KEY" ]]; then
+  export OPENAI_API_KEY="$_KEY"
+  export GOOGLE_API_KEY="$_KEY"
+  export GEMINI_API_KEY="$_KEY"
+  export KIMI_API_KEY="$_KEY"
+  export GHOST_API_KEY="$_KEY"
+  ok "API key active."
+fi
+
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 3 — Load stealth prompt context (if available)
+# PHASE 2 — Load stealth prompt context
 # ══════════════════════════════════════════════════════════════════════════════
 INSTRUCTION_ARGS=()
 if [[ -f "$STEALTH_PROMPT" ]]; then
-  log "Feeding stealth prompt context..."
   STEALTH_TEXT="$(cat "$STEALTH_PROMPT")"
-  ok "Stealth profile loaded."
+  ok "Stealth profile loaded: $STEALTH_PROMPT"
   INSTRUCTION_ARGS=(-i "$STEALTH_TEXT")
 else
-  warn "No stealth prompt at $STEALTH_PROMPT — using AI defaults."
+  warn "No stealth prompt at $STEALTH_PROMPT — using AI defaults"
+  warn "Generate one with: ghost-setup (or ghost-setup --all)"
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 4 — Activate AI engine
+# PHASE 3 — Activate environment
 # ══════════════════════════════════════════════════════════════════════════════
 echo ""
-echo "=============================================================================="
+echo "────────────────────────────────────────────────────────────────────────────"
 ok "GHOST Secure Environment ACTIVE"
-ok "Model: $AI_MODEL"
-echo "=============================================================================="
+echo "────────────────────────────────────────────────────────────────────────────"
 echo ""
 
 if ! $LAUNCH_AI; then
-  log "AI launch skipped (--no-ai). Environment is active."
+  log "AI launch skipped (--no-ai). Dropping to authenticated shell."
   exec bash --norc
 fi
 
-# ── Require a target ──────────────────────────────────────────────────────────
-if [[ -z "$AI_TARGET" ]]; then
-  warn "No target specified."
-  warn "Usage: ghost-start --target <hostname-or-IP>"
-  warn "       ghost-vault.sh --target <hostname-or-IP>"
-  echo ""
-  info "GHOST is active but no pentestgpt session started."
-  info "You can now run tools manually:"
-  info "  pentestgpt -t <target> -m $AI_MODEL"
-  info "  sublist3r -d <domain>"
-  info "  nmap -sV <target>"
-  echo ""
-  exec bash --norc
-fi
+# ══════════════════════════════════════════════════════════════════════════════
+# PHASE 4 — AI engine dispatch
+# ══════════════════════════════════════════════════════════════════════════════
+case "$AI_ENGINE" in
 
-# ── Activate venv and run pentestgpt ─────────────────────────────────────────
-log "Activating AI agent framework..."
+  # ── kimi ──────────────────────────────────────────────────────────────────
+  kimi)
+    KIMI_BIN=""
+    if has_cmd kimi;      then KIMI_BIN="$(command -v kimi)"
+    elif has_cmd kimi-cli; then KIMI_BIN="$(command -v kimi-cli)"
+    elif [[ -x "$GHOST_ROOT/bin/ghost-kimi" ]]; then KIMI_BIN="$GHOST_ROOT/bin/ghost-kimi"
+    fi
 
-PENTESTGPT_BIN=""
-if [[ -f "$PENTESTGPT_VENV/bin/pentestgpt" ]]; then
-  # Venv-installed
-  PENTESTGPT_BIN="$PENTESTGPT_VENV/bin/pentestgpt"
-  source "$PENTESTGPT_VENV/bin/activate"
-elif has_cmd pentestgpt; then
-  PENTESTGPT_BIN="$(command -v pentestgpt)"
-else
-  warn "pentestgpt not found."
-  warn "Install with: pip install pentestgpt  (or run ghost-setup)"
-  exec bash --norc
-fi
+    if [[ -z "$KIMI_BIN" ]]; then
+      warn "kimi not found. Install with: curl -L code.kimi.com/install.sh | bash"
+      warn "Falling back to interactive shell."
+      exec bash --norc
+    fi
 
-exec "$PENTESTGPT_BIN" \
-  -t "$AI_TARGET" \
-  -m "$AI_MODEL" \
-  "${INSTRUCTION_ARGS[@]+"${INSTRUCTION_ARGS[@]}"}"
+    log "Launching Kimi AI agent..."
+    if [[ -n "$AI_TARGET" ]]; then
+      exec "$KIMI_BIN" "You are a penetration testing assistant. Target: $AI_TARGET. ${STEALTH_TEXT:-}"
+    else
+      exec "$KIMI_BIN"
+    fi
+    ;;
+
+  # ── bash (vault-only shell) ───────────────────────────────────────────────
+  bash)
+    log "Dropping to authenticated shell (API key exported)."
+    exec bash --norc
+    ;;
+
+  # ── pentestgpt (default) ──────────────────────────────────────────────────
+  pentestgpt|*)
+    # Locate pentestgpt binary — prefer venv, then PATH
+    PENTESTGPT_BIN=""
+    if [[ -x "$AI_VENV/bin/pentestgpt" ]]; then
+      source "$AI_VENV/bin/activate" 2>/dev/null || true
+      PENTESTGPT_BIN="$AI_VENV/bin/pentestgpt"
+    elif [[ -x "$GHOST_ROOT/bin/pentestgpt-ghost" ]]; then
+      PENTESTGPT_BIN="$GHOST_ROOT/bin/pentestgpt-ghost"
+    elif has_cmd pentestgpt; then
+      PENTESTGPT_BIN="$(command -v pentestgpt)"
+    fi
+
+    if [[ -z "$PENTESTGPT_BIN" ]]; then
+      warn "pentestgpt not found."
+      warn "Run: ghost-setup --ai   to install it."
+      warn "Or:  pip install pentestgpt"
+      echo ""
+      info "Available commands in this shell (API key is active):"
+      info "  nmap -sV $AI_TARGET"
+      info "  sublist3r -d <domain>"
+      info "  kismet"
+      exec bash --norc
+    fi
+
+    # ── Require a target for pentestgpt ──────────────────────────────────
+    if [[ -z "$AI_TARGET" ]]; then
+      warn "No target specified for pentestgpt."
+      echo ""
+      info "Usage examples:"
+      info "  ghost-vault.sh -t 192.168.1.1"
+      info "  ghost-vault.sh -t 192.168.1.1 -m gpt-4o"
+      info "  ghost-vault.sh -t 192.168.1.1 -e kimi"
+      echo ""
+      info "Dropping to authenticated shell. API key is active."
+      info "You can run pentestgpt manually:"
+      info "  pentestgpt -t <target>"
+      exec bash --norc
+    fi
+
+    # ── Build pentestgpt command ──────────────────────────────────────────
+    PG_ARGS=(-t "$AI_TARGET")
+    [[ -n "$AI_MODEL" ]] && PG_ARGS+=(-m "$AI_MODEL")
+    [[ ${#INSTRUCTION_ARGS[@]} -gt 0 ]] && PG_ARGS+=("${INSTRUCTION_ARGS[@]}")
+
+    log "Launching pentestgpt against: $AI_TARGET"
+    exec "$PENTESTGPT_BIN" "${PG_ARGS[@]}"
+    ;;
+esac
