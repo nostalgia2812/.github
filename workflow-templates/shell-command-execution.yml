@@ -1,0 +1,78 @@
+name: Shell Command Execution
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Shell command to execute'
+        required: true
+        type: string
+      background:
+        description: 'Run command in background'
+        required: false
+        type: boolean
+        default: false
+      timeout:
+        description: 'Timeout in seconds (default: 1800)'
+        required: false
+        type: number
+        default: 1800
+
+jobs:
+  execute-foreground:
+    name: Foreground Execution
+    if: ${{ !inputs.background }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Execute command (foreground)
+        shell: bash
+        timeout-minutes: ${{ fromJSON(inputs.timeout) / 60 }}
+        run: |
+          echo "Running command in foreground: ${{ inputs.command }}"
+          ${{ inputs.command }}
+
+  execute-background:
+    name: Background Execution
+    if: ${{ inputs.background }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Execute command (background)
+        shell: bash
+        run: |
+          echo "Starting command in background: ${{ inputs.command }}"
+          ${{ inputs.command }} &
+          BG_PID=$!
+          echo "Background process started with PID: $BG_PID"
+          echo "BG_PID=$BG_PID" >> $GITHUB_ENV
+
+      - name: Poll process status
+        shell: bash
+        run: |
+          MAX_WAIT=${{ inputs.timeout }}
+          ELAPSED=0
+          INTERVAL=5
+
+          echo "Polling process $BG_PID status (timeout: ${MAX_WAIT}s)..."
+          while kill -0 $BG_PID 2>/dev/null; do
+            if [ $ELAPSED -ge $MAX_WAIT ]; then
+              echo "Process timed out after ${MAX_WAIT}s, terminating..."
+              kill $BG_PID 2>/dev/null || true
+              exit 1
+            fi
+            echo "Process $BG_PID still running (${ELAPSED}s elapsed)..."
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          wait $BG_PID
+          EXIT_CODE=$?
+          echo "Background process $BG_PID exited with code: $EXIT_CODE"
+          exit $EXIT_CODE

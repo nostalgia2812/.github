@@ -1,0 +1,6 @@
+{
+  "name": "Shell Command Execution",
+  "description": "Run shell commands in the workspace with support for foreground and background execution via process management.",
+  "iconName": "terminal",
+  "categories": ["Automation", "Utilities"]
+}
