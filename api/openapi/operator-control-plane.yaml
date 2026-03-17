@@ -1,0 +1,524 @@
+openapi: 3.1.0
+info:
+  title: Operator Control Plane API
+  version: 1.0.0
+  summary: Contract for approval workflows, incident actions, and immutable audit logging.
+  description: |
+    The Operator Control Plane API supports operational governance for skill execution and publishing.
+    It defines:
+      - Approval queue management (list pending approvals, approve/deny, attach justification)
+      - Incident response actions (quarantine skill, revoke credentials, disable publisher, replay run timeline)
+      - Immutable audit events with actor, action, resource, decision, and correlation IDs
+      - Role-based access controls for operator, reviewer, and admin personas
+servers:
+  - url: https://control-plane.example.com
+    description: Production
+  - url: https://staging-control-plane.example.com
+    description: Staging
+security:
+  - bearerAuth: []
+tags:
+  - name: Approvals
+  - name: Incidents
+  - name: Audit
+  - name: Access Control
+paths:
+  /v1/approvals:
+    get:
+      tags: [Approvals]
+      summary: List pending approvals
+      operationId: listPendingApprovals
+      description: Returns approvals that are currently pending review.
+      parameters:
+        - in: query
+          name: queue
+          required: false
+          schema:
+            type: string
+          description: Optional queue partition key.
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: Pending approvals list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Approval'
+                  next_cursor:
+                    type: string
+                    nullable: true
+                required: [data]
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-required-roles: [operator, reviewer, admin]
+
+  /v1/approvals/{approval_id}/decision:
+    post:
+      tags: [Approvals]
+      summary: Approve or deny a pending action
+      operationId: decideApproval
+      parameters:
+        - $ref: '#/components/parameters/ApprovalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDecisionRequest'
+      responses:
+        '200':
+          description: Approval decision accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalDecision'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Approval already decided.
+      x-required-roles: [reviewer, admin]
+
+  /v1/approvals/{approval_id}/justification:
+    post:
+      tags: [Approvals]
+      summary: Attach a justification to an approval item
+      operationId: attachApprovalJustification
+      parameters:
+        - $ref: '#/components/parameters/ApprovalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JustificationRequest'
+      responses:
+        '200':
+          description: Justification attached.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Approval'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-required-roles: [operator, reviewer, admin]
+
+  /v1/incidents/skills/{skill_id}/quarantine:
+    post:
+      tags: [Incidents]
+      summary: Quarantine a skill
+      operationId: quarantineSkill
+      parameters:
+        - in: path
+          name: skill_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentActionRequest'
+      responses:
+        '202':
+          description: Quarantine action accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentActionResult'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-required-roles: [operator, admin]
+
+  /v1/incidents/credentials/{credential_id}/revoke:
+    post:
+      tags: [Incidents]
+      summary: Revoke a credential
+      operationId: revokeCredential
+      parameters:
+        - in: path
+          name: credential_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentActionRequest'
+      responses:
+        '202':
+          description: Credential revocation accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentActionResult'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-required-roles: [operator, admin]
+
+  /v1/incidents/publishers/{publisher_id}/disable:
+    post:
+      tags: [Incidents]
+      summary: Disable a publisher
+      operationId: disablePublisher
+      parameters:
+        - in: path
+          name: publisher_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentActionRequest'
+      responses:
+        '202':
+          description: Publisher disable action accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentActionResult'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-required-roles: [admin]
+
+  /v1/incidents/runs/{run_id}/timeline:replay:
+    post:
+      tags: [Incidents]
+      summary: Replay a run timeline
+      operationId: replayRunTimeline
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from_event_sequence:
+                  type: integer
+                  minimum: 0
+      responses:
+        '202':
+          description: Replay scheduled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentActionResult'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-required-roles: [operator, reviewer, admin]
+
+  /v1/audit/events:
+    get:
+      tags: [Audit]
+      summary: List immutable audit events
+      operationId: listAuditEvents
+      parameters:
+        - in: query
+          name: correlation_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        '200':
+          description: Audit event stream.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEvent'
+                  next_cursor:
+                    type: string
+                    nullable: true
+                required: [data]
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-required-roles: [reviewer, admin]
+
+  /v1/access/roles:
+    get:
+      tags: [Access Control]
+      summary: Get role model and permissions matrix
+      operationId: getRoleModel
+      responses:
+        '200':
+          description: Role model.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleModel'
+      x-required-roles: [operator, reviewer, admin]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ApprovalId:
+      in: path
+      name: approval_id
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Forbidden:
+      description: Caller does not have a role allowed to access this endpoint.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Approval:
+      type: object
+      properties:
+        approval_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        resource:
+          $ref: '#/components/schemas/ResourceRef'
+        status:
+          type: string
+          enum: [pending, approved, denied]
+        requested_by:
+          $ref: '#/components/schemas/Actor'
+        created_at:
+          type: string
+          format: date-time
+        justification:
+          type: string
+          nullable: true
+      required:
+        [approval_id, action, resource, status, requested_by, created_at]
+
+    ApprovalDecisionRequest:
+      type: object
+      properties:
+        decision:
+          type: string
+          enum: [approved, denied]
+        reason:
+          type: string
+          minLength: 1
+        correlation_id:
+          type: string
+          format: uuid
+      required: [decision, reason, correlation_id]
+
+    ApprovalDecision:
+      type: object
+      properties:
+        approval_id:
+          type: string
+          format: uuid
+        decision:
+          type: string
+          enum: [approved, denied]
+        decided_by:
+          $ref: '#/components/schemas/Actor'
+        decided_at:
+          type: string
+          format: date-time
+        correlation_id:
+          type: string
+          format: uuid
+      required:
+        [approval_id, decision, decided_by, decided_at, correlation_id]
+
+    JustificationRequest:
+      type: object
+      properties:
+        justification:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        correlation_id:
+          type: string
+          format: uuid
+      required: [justification, correlation_id]
+
+    IncidentActionRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 1
+        correlation_id:
+          type: string
+          format: uuid
+        ticket_id:
+          type: string
+      required: [reason, correlation_id]
+
+    IncidentActionResult:
+      type: object
+      properties:
+        action_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [accepted, completed, failed]
+        correlation_id:
+          type: string
+          format: uuid
+        accepted_at:
+          type: string
+          format: date-time
+      required: [action_id, status, correlation_id, accepted_at]
+
+    AuditEvent:
+      type: object
+      description: Immutable audit record; once written, it MUST NOT be modified or deleted.
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        occurred_at:
+          type: string
+          format: date-time
+        actor:
+          $ref: '#/components/schemas/Actor'
+        action:
+          type: string
+          description: Verb phrase describing what was attempted or executed.
+        resource:
+          $ref: '#/components/schemas/ResourceRef'
+        decision:
+          type: string
+          enum: [approved, denied, accepted, rejected, executed, failed, observed]
+        correlation_id:
+          type: string
+          format: uuid
+        causation_id:
+          type: string
+          format: uuid
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+      required:
+        [event_id, occurred_at, actor, action, resource, decision, correlation_id]
+
+    Actor:
+      type: object
+      properties:
+        actor_id:
+          type: string
+          format: uuid
+        actor_type:
+          type: string
+          enum: [human, service]
+        role:
+          $ref: '#/components/schemas/Role'
+      required: [actor_id, actor_type, role]
+
+    ResourceRef:
+      type: object
+      properties:
+        resource_type:
+          type: string
+          enum: [approval, skill, credential, publisher, run, incident]
+        resource_id:
+          type: string
+      required: [resource_type, resource_id]
+
+    Role:
+      type: string
+      enum: [operator, reviewer, admin]
+
+    RoleModel:
+      type: object
+      properties:
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        permissions:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                $ref: '#/components/schemas/Role'
+              allowed_operations:
+                type: array
+                items:
+                  type: string
+            required: [role, allowed_operations]
+      required: [roles, permissions]
+      example:
+        roles: [operator, reviewer, admin]
+        permissions:
+          - role: operator
+            allowed_operations:
+              - approvals:list
+              - approvals:justify
+              - incidents:quarantine_skill
+              - incidents:revoke_credential
+              - incidents:replay_timeline
+          - role: reviewer
+            allowed_operations:
+              - approvals:list
+              - approvals:decide
+              - approvals:justify
+              - incidents:replay_timeline
+              - audit:read
+          - role: admin
+            allowed_operations:
+              - "*"
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      required: [code, message]
