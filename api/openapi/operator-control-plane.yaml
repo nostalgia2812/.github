@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Operator Control Plane API
-  version: 1.0.0
+  version: 1.1.0
   summary: Contract for approval workflows, incident actions, and immutable audit logging.
   description: |
     The Operator Control Plane API supports operational governance for skill execution and publishing.
@@ -80,6 +80,60 @@ paths:
       responses:
         '200':
           description: Approval decision accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalDecision'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Approval already decided.
+      x-required-roles: [reviewer, admin]
+
+  /v1/approvals/{approval_id}/approve:
+    post:
+      tags: [Approvals]
+      summary: Approve a pending action
+      operationId: approveApproval
+      description: Convenience endpoint for an `approved` decision.
+      parameters:
+        - $ref: '#/components/parameters/ApprovalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalApproveRequest'
+      responses:
+        '200':
+          description: Approval accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalDecision'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Approval already decided.
+      x-required-roles: [reviewer, admin]
+
+  /v1/approvals/{approval_id}/deny:
+    post:
+      tags: [Approvals]
+      summary: Deny a pending action
+      operationId: denyApproval
+      description: Convenience endpoint for a `denied` decision.
+      parameters:
+        - $ref: '#/components/parameters/ApprovalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDenyRequest'
+      responses:
+        '200':
+          description: Denial accepted.
           content:
             application/json:
               schema:
@@ -351,6 +405,31 @@ components:
           format: uuid
       required: [decision, reason, correlation_id]
 
+    ApprovalApproveRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 1
+        correlation_id:
+          type: string
+          format: uuid
+      required: [reason, correlation_id]
+
+    ApprovalDenyRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 1
+        remediation_required:
+          type: boolean
+          default: true
+        correlation_id:
+          type: string
+          format: uuid
+      required: [reason, correlation_id]
+
     ApprovalDecision:
       type: object
       properties:
@@ -416,13 +495,16 @@ components:
     AuditEvent:
       type: object
       description: Immutable audit record; once written, it MUST NOT be modified or deleted.
+      x-immutable: true
       properties:
         event_id:
           type: string
           format: uuid
+          readOnly: true
         occurred_at:
           type: string
           format: date-time
+          readOnly: true
         actor:
           $ref: '#/components/schemas/Actor'
         action:
@@ -436,15 +518,26 @@ components:
         correlation_id:
           type: string
           format: uuid
+          readOnly: true
         causation_id:
           type: string
           format: uuid
           nullable: true
+          readOnly: true
+        previous_event_hash:
+          type: string
+          description: Hash pointer to the prior event in the append-only audit chain.
+          readOnly: true
+        event_hash:
+          type: string
+          description: Canonical hash of this event payload for tamper evidence.
+          readOnly: true
         metadata:
           type: object
           additionalProperties: true
+          readOnly: true
       required:
-        [event_id, occurred_at, actor, action, resource, decision, correlation_id]
+        [event_id, occurred_at, actor, action, resource, decision, correlation_id, event_hash]
 
     Actor:
       type: object
