@@ -433,6 +433,30 @@ input:focus, textarea:focus {
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
 .blink { animation: blink 1.6s ease-in-out infinite; }
 
+/* ── Fluid result panel ───────────────────────────────────────── */
+.fluid-result {
+  margin-top: .8rem;
+  padding: .7rem .85rem;
+  border: 1px solid rgba(0,229,255,.2);
+  border-radius: 6px;
+  background: rgba(0,229,255,.04);
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.fluid-result .fluid-title {
+  display: block;
+  color: var(--cyan);
+  font-size: .75rem;
+  font-weight: 600;
+  margin-bottom: .4rem;
+  letter-spacing: .04em;
+}
+.fluid-result .fluid-ok   { color: var(--green); }
+.fluid-result .fluid-warn { color: var(--amber); }
+
 /* ── Responsive ───────────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .sidebar { width: 190px; }

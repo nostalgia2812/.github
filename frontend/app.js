@@ -1,14 +1,18 @@
 /* ── SKILLDEF Dashboard — app.js ─────────────────────────────────
-   Wires up all GHOST v6 widgets:
+   Widgets wired:
    - Stat strip counters
-   - Scan form → POST /api/scan
+   - Scan form → POST /api/scan  (X-API-Key forwarded when set)
    - Arc + bar risk meter
    - Rule-impact bars
+   - Findings panel + Fluid result panel
    - Live feed (WebSocket /ws/feed)
-   - Checklist (GET /api/checklist)
-   - IOC list  (GET /api/iocs)
+   - Checklist   (GET /api/checklist)
+   - IOC list    (GET /api/iocs)
    - Sidebar stat bars + module toggles
-   - Command prompt (help / health / iocs / checklist / stats / clear)
+   - Fluid Link module status (GET /api/integrations/fluid/status)
+   - Send to Fluid (POST /api/integrations/fluid/payload)
+   - Command prompt: help / health / iocs / checklist / stats /
+                     fluid / api / threat-model / clear / version
    ─────────────────────────────────────────────────────────────── */
 
 'use strict';
@@ -17,6 +21,19 @@ const API_BASE = window.API_BASE || '';
 
 /* ── DOM helper ────────────────────────────────────────────────── */
 function el(id) { return document.getElementById(id); }
+
+/* ── API key helper ────────────────────────────────────────────── */
+function getApiKey() {
+  const inp = el('api-key');
+  return inp ? inp.value.trim() : '';
+}
+
+function authHeaders(extra = {}) {
+  const key = getApiKey();
+  return key
+    ? { 'Content-Type': 'application/json', 'X-API-Key': key, ...extra }
+    : { 'Content-Type': 'application/json', ...extra };
+}
 
 /* ── Session counters ──────────────────────────────────────────── */
 const counters = { total: 0, critical: 0, high: 0, medium: 0, low: 0 };
@@ -117,12 +134,38 @@ function renderResult(data) {
   incCounter(data.risk_level);
 }
 
+/* ── Fluid result panel ────────────────────────────────────────── */
+function showFluidResult(data) {
+  const panel = el('fluid-result');
+  panel.classList.remove('hidden');
+
+  const configured = data.configured;
+  const badge = configured
+    ? `<span class="fluid-ok">● Configured</span>`
+    : `<span class="fluid-warn">● Not configured (set FLUID_API_KEY env var)</span>`;
+
+  panel.innerHTML = `
+    <span class="fluid-title">Fluid Integration Payload ${badge}</span>
+    <strong>Target:</strong> ${data.target}
+    <strong>Risk:</strong>   ${data.payload.risk_level} (${data.payload.risk_score}/100)
+    <strong>Findings:</strong> ${data.payload.findings.length} rule(s) matched
+    <strong>Payload (JSON):</strong>
+<code>${JSON.stringify(data.payload, null, 2)}</code>`;
+}
+
+/* ── Last scan payload (for Send to Fluid) ─────────────────────── */
+let lastScanPayload = null;
+
 /* ── Scan form ─────────────────────────────────────────────────── */
 el('scan-form').addEventListener('submit', async (evt) => {
   evt.preventDefault();
   const btn = el('scan-btn');
   btn.disabled    = true;
   btn.textContent = 'Analysing…';
+
+  // Hide Fluid panel from previous scan
+  el('fluid-result').classList.add('hidden');
+  el('fluid-btn').disabled = true;
 
   const payload = {
     skill_name:       el('skill_name').value.trim(),
@@ -134,12 +177,14 @@ el('scan-form').addEventListener('submit', async (evt) => {
   try {
     const res = await fetch(`${API_BASE}/api/scan`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body:    JSON.stringify(payload),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     renderResult(data);
+    lastScanPayload = payload;
+    el('fluid-btn').disabled = false;
     feedPush(`Scan complete: ${payload.skill_name} — Risk ${data.risk_level} (${data.risk_score})`, 'info');
     cmdPrint(`Scan finished: ${payload.skill_name}`, 'var(--cyan)');
   } catch (err) {
@@ -148,6 +193,36 @@ el('scan-form').addEventListener('submit', async (evt) => {
   } finally {
     btn.disabled    = false;
     btn.textContent = 'Run Analysis';
+  }
+});
+
+/* ── Send to Fluid button ──────────────────────────────────────── */
+el('fluid-btn').addEventListener('click', async () => {
+  if (!lastScanPayload) return;
+  const btn = el('fluid-btn');
+  btn.disabled    = true;
+  btn.textContent = 'Sending…';
+  try {
+    const res = await fetch(`${API_BASE}/api/integrations/fluid/payload`, {
+      method:  'POST',
+      headers: authHeaders(),
+      body:    JSON.stringify(lastScanPayload),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    showFluidResult(data);
+    feedPush(`Fluid payload built for "${lastScanPayload.skill_name}".`,
+      data.configured ? 'success' : 'warn');
+    cmdPrint(
+      `Fluid payload ready — target: ${data.target}`,
+      data.configured ? 'var(--green)' : 'var(--amber)'
+    );
+  } catch (err) {
+    feedPush(`Fluid error: ${err.message}`, 'error');
+    cmdPrint(`Fluid error: ${err.message}`, 'var(--pink)');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Send to Fluid';
   }
 });
 
@@ -185,6 +260,45 @@ async function loadChecklist() {
       </div>`).join('');
   } catch (_) {
     el('checklist-body').innerHTML = '<p class="muted micro">Could not load checklist.</p>';
+  }
+}
+
+/* ── Fluid status (sidebar module) ────────────────────────────── */
+async function loadFluidStatus(silent = false) {
+  const modFluid = document.querySelector('[data-module="fluid"]');
+  try {
+    const res  = await fetch(`${API_BASE}/api/integrations/fluid/status`,
+      { headers: authHeaders({ 'Content-Type': undefined }) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    if (modFluid) {
+      const dot = modFluid.querySelector('.dot');
+      if (data.configured) {
+        dot.className = 'dot green';
+        modFluid.classList.add('active');
+      } else {
+        dot.className = 'dot amber';
+      }
+    }
+
+    if (!silent) {
+      cmdPrint(
+        `Fluid — configured: <strong>${data.configured}</strong> · ` +
+        `base_url: ${data.base_url}` +
+        (data.api_key_masked ? ` · key: ${data.api_key_masked}` : ''),
+        data.configured ? 'var(--green)' : 'var(--amber)'
+      );
+      feedPush(
+        `Fluid status: ${data.configured ? 'configured' : 'not configured'} — ${data.base_url}`,
+        data.configured ? 'success' : 'warn'
+      );
+    }
+    return data;
+  } catch (err) {
+    if (modFluid) modFluid.querySelector('.dot').className = 'dot pink';
+    if (!silent) cmdPrint(`Fluid status error: ${err.message}`, 'var(--pink)');
+    return null;
   }
 }
 
@@ -279,13 +393,16 @@ function cmdPrint(html, color = 'var(--text)') {
 }
 
 const HELP_TEXT = [
-  '<strong>help</strong>       — show this message',
-  '<strong>health</strong>     — API health check',
-  '<strong>iocs</strong>       — reload IOC list',
-  '<strong>checklist</strong>  — reload checklist',
-  '<strong>stats</strong>      — session scan counters',
-  '<strong>clear</strong>      — clear prompt output',
-  '<strong>version</strong>    — show version',
+  '<strong>help</strong>         — show this message',
+  '<strong>health</strong>       — API health check',
+  '<strong>iocs</strong>         — reload IOC list',
+  '<strong>checklist</strong>    — reload checklist',
+  '<strong>stats</strong>        — session scan counters',
+  '<strong>fluid</strong>        — Fluid integration status',
+  '<strong>api</strong>          — list all API endpoints',
+  '<strong>threat-model</strong> — OpenClaw threat model info',
+  '<strong>clear</strong>        — clear prompt output',
+  '<strong>version</strong>      — show version',
 ].join('<br>');
 
 el('cmd-form').addEventListener('submit', async (e) => {
@@ -342,6 +459,48 @@ el('cmd-form').addEventListener('submit', async (e) => {
       cmdPrint('SKILLDEF AI Skill Defense Console v2.2.0', 'var(--cyan)');
       break;
 
+    case 'fluid':
+      await loadFluidStatus(false);
+      break;
+
+    case 'api': {
+      try {
+        const data = await fetch(`${API_BASE}/api`).then(r => r.json());
+        const lines = data.endpoints.map(ep =>
+          `<span style="color:var(--cyan)">${ep.method.padEnd(4)}</span> ` +
+          `${ep.path}` +
+          (ep.protected ? ' <span style="color:var(--amber)">[key]</span>' : '')
+        ).join('<br>');
+        cmdPrint(
+          `<strong>${data.service}</strong> v${data.version} — ` +
+          `${data.total_endpoints} endpoints:<br>${lines}`,
+          'var(--text)'
+        );
+      } catch (err) {
+        cmdPrint(`API catalog error: ${err.message}`, 'var(--pink)');
+      }
+      break;
+    }
+
+    case 'threat-model': {
+      try {
+        const res = await fetch(`${API_BASE}/api/threat-model/raw`,
+          { headers: authHeaders({ 'Content-Type': undefined }) });
+        if (!res.ok) throw new Error(`HTTP ${res.status} — set API key if required`);
+        const data = await res.json();
+        const lines = data.code.split('\n').length;
+        cmdPrint(
+          `OpenClaw threat model: <strong>${data.filename}</strong> · ` +
+          `${lines} lines · ` +
+          `<span style="color:var(--muted)">use /api/threat-model/raw to export</span>`,
+          'var(--cyan)'
+        );
+      } catch (err) {
+        cmdPrint(`Threat model error: ${err.message}`, 'var(--pink)');
+      }
+      break;
+    }
+
     default:
       cmdPrint(`Unknown command: <em>${cmd}</em>. Type <strong>help</strong>.`, 'var(--muted)');
   }
@@ -350,3 +509,4 @@ el('cmd-form').addEventListener('submit', async (e) => {
 /* ── Startup ───────────────────────────────────────────────────── */
 loadIocs();
 loadChecklist();
+loadFluidStatus(true);   // silently update sidebar Fluid module dot
