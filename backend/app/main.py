@@ -1,11 +1,12 @@
 from datetime import UTC, datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .data import CHECKLIST, IOCS
 from .engine import analyze_request
+from .antigravity_integration import AI_MODELS, antigravity_status, list_models
 from .fluid_integration import build_fluid_payload, fluid_status
 from .openclaw_threat_model import generate_complete_code_string
 from .schemas import Checklist, Indicator, ScanRequest, ScanResponse
@@ -59,6 +60,18 @@ API_CATALOG: List[Dict[str, Any]] = [
         "path": "/api/integrations/fluid/payload",
         "method": "POST",
         "description": "Generate Fluid-ready payload from scan results.",
+        "protected": True,
+    },
+    {
+        "path": "/api/integrations/antigravity/status",
+        "method": "GET",
+        "description": "Show Antigravity installation status and configured AI providers.",
+        "protected": True,
+    },
+    {
+        "path": "/api/models",
+        "method": "GET",
+        "description": "List all supported AI models, optionally filtered by provider.",
         "protected": True,
     },
 ]
@@ -117,3 +130,15 @@ def get_fluid_status() -> dict:
 @app.post("/api/integrations/fluid/payload", dependencies=[Depends(require_api_key)])
 def get_fluid_payload(payload: ScanRequest) -> dict:
     return build_fluid_payload(payload)
+
+
+@app.get("/api/integrations/antigravity/status", dependencies=[Depends(require_api_key)])
+def get_antigravity_status() -> dict:
+    return antigravity_status()
+
+
+@app.get("/api/models", dependencies=[Depends(require_api_key)])
+def get_models(provider: Optional[str] = None) -> dict:
+    models = list_models(provider=provider)
+    providers = sorted({m["provider"] for m in AI_MODELS})
+    return {"total": len(models), "providers": providers, "models": models}
