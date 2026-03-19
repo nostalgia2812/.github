@@ -1,189 +1,306 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Skill Defense Console</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <header class="topbar">
-      <div>
-        <h1>AI Skill Defense Dashboard</h1>
-        <p>Hail Mary Edition — multi-model consensus · live alerts · batch scanning · auto-remediation</p>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Skill Defense Console</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ── SIDEBAR ──────────────────────────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="brand">
+    <div class="brand-icon">⬡</div>
+    <div>
+      <div class="brand-name">SkillDefense</div>
+      <div class="brand-sub">OpenClaw · v3.0</div>
+    </div>
+  </div>
+
+  <nav class="sidenav">
+    <button class="navbtn active" data-tab="overview">
+      <span class="nav-icon">◈</span> Overview
+    </button>
+    <button class="navbtn" data-tab="scan">
+      <span class="nav-icon">⬡</span> Scan
+    </button>
+    <button class="navbtn" data-tab="consensus">
+      <span class="nav-icon">◉</span> Consensus
+    </button>
+    <button class="navbtn" data-tab="batch">
+      <span class="nav-icon">▦</span> Batch
+    </button>
+    <button class="navbtn" data-tab="remediate">
+      <span class="nav-icon">⚑</span> Remediate
+    </button>
+    <button class="navbtn" data-tab="models">
+      <span class="nav-icon">⊞</span> Models
+    </button>
+    <button class="navbtn" data-tab="alerts">
+      <span class="nav-icon">⚡</span> Live Alerts
+    </button>
+    <button class="navbtn" data-tab="threats">
+      <span class="nav-icon">☣</span> Threat Feed
+    </button>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="ws-indicator" id="ws-indicator">
+      <span class="ws-dot" id="ws-dot"></span>
+      <span id="ws-label">WS offline</span>
+    </div>
+    <div class="model-badge" id="model-count-badge">— models</div>
+  </div>
+</aside>
+
+<!-- ── MAIN ──────────────────────────────────────────────────────────────────── -->
+<main class="main">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="topbar-title" id="page-title">Overview</div>
+    <div class="topbar-actions">
+      <button class="btn-sm" id="ws-toggle">Connect WS</button>
+    </div>
+  </header>
+
+  <!-- ── OVERVIEW ──────────────────────────────────────────────────────────── -->
+  <section class="tab-panel active" id="tab-overview">
+    <div class="kpi-row">
+      <div class="kpi-card" id="kpi-scans">
+        <div class="kpi-icon">⬡</div>
+        <div class="kpi-val" id="kpi-scans-val">0</div>
+        <div class="kpi-label">Total Scans</div>
       </div>
-      <div class="header-badges">
-        <span class="pill">OpenClaw Model</span>
-        <span class="pill pill-ws" id="ws-badge">WS ○</span>
-        <span class="pill pill-models" id="model-count-badge">— models</span>
+      <div class="kpi-card kpi-critical" id="kpi-crit">
+        <div class="kpi-icon">🔴</div>
+        <div class="kpi-val" id="kpi-crit-val">0</div>
+        <div class="kpi-label">Critical Alerts</div>
       </div>
-    </header>
+      <div class="kpi-card kpi-high" id="kpi-high">
+        <div class="kpi-icon">🟠</div>
+        <div class="kpi-val" id="kpi-high-val">0</div>
+        <div class="kpi-label">High Alerts</div>
+      </div>
+      <div class="kpi-card kpi-ok" id="kpi-models">
+        <div class="kpi-icon">◉</div>
+        <div class="kpi-val" id="kpi-models-val">37</div>
+        <div class="kpi-label">AI Models</div>
+      </div>
+    </div>
 
-    <nav class="tab-bar">
-      <button class="tab active" data-tab="scan">Scan</button>
-      <button class="tab" data-tab="consensus">Consensus</button>
-      <button class="tab" data-tab="batch">Batch</button>
-      <button class="tab" data-tab="remediate">Remediate</button>
-      <button class="tab" data-tab="models">Models</button>
-      <button class="tab" data-tab="alerts">Live Alerts</button>
-      <button class="tab" data-tab="threats">Threat Feed</button>
-    </nav>
+    <div class="dash-grid">
+      <div class="card">
+        <div class="card-head">Risk Distribution</div>
+        <canvas id="cv-donut" style="width:100%;height:180px"></canvas>
+      </div>
 
-    <main class="layout">
+      <div class="card">
+        <div class="card-head">Alert Trend <span class="muted small">(last 12 scans)</span></div>
+        <canvas id="cv-trend" style="width:100%;height:180px"></canvas>
+      </div>
 
-      <!-- SCAN -->
-      <section class="tab-panel active" id="tab-scan">
-        <div class="grid-2">
-          <div class="card span-2">
-            <h2>Skill Analysis</h2>
-            <form id="scan-form">
-              <label>Skill Name <input id="skill_name" required placeholder="My Finance Tracker" /></label>
-              <label>Publisher <input id="publisher" required placeholder="acme-corp" /></label>
-              <label>Instruction Text <textarea id="instruction_text" rows="4" required placeholder="Describe what the skill does…"></textarea></label>
-              <label>URLs (comma separated) <input id="urls" placeholder="https://example.com/skill.zip" /></label>
-              <button type="submit">Run Analysis</button>
-            </form>
-          </div>
-          <div class="card">
-            <h2>Risk Meter</h2>
-            <div class="meter"><div id="meter-fill" class="meter-fill"></div></div>
-            <p id="meter-label" class="muted">Run a scan to visualize risk.</p>
-            <div id="risk-level" class="risk-level hidden"></div>
-          </div>
-          <div class="card">
-            <h2>Rule Impact</h2>
-            <div id="bars" class="bars muted">No rule matches yet.</div>
-          </div>
-          <div class="card span-2">
-            <h2>Findings</h2>
-            <article id="result" class="result muted">No scan results yet.</article>
-          </div>
-          <div class="card span-2">
-            <h2>Threat Intelligence</h2>
-            <ul id="ioc-list" class="stack"></ul>
+      <div class="card span-2">
+        <div class="card-head">Provider Coverage Heatmap</div>
+        <canvas id="cv-heatmap" style="width:100%;height:160px"></canvas>
+      </div>
+
+      <div class="card span-2">
+        <div class="card-head">Live Alert Feed</div>
+        <div id="overview-feed" class="feed-list muted">No alerts yet — run a scan.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SCAN ──────────────────────────────────────────────────────────────── -->
+  <section class="tab-panel hidden" id="tab-scan">
+    <div class="dash-grid">
+      <div class="card">
+        <div class="card-head">Skill Input</div>
+        <form id="scan-form">
+          <label>Skill Name <input id="skill_name" required placeholder="My Finance Tracker" /></label>
+          <label>Publisher  <input id="publisher"  required placeholder="acme-corp" /></label>
+          <label>Instruction Text
+            <textarea id="instruction_text" rows="4" required placeholder="Describe what the skill does…"></textarea>
+          </label>
+          <label>URLs (comma separated)
+            <input id="urls" placeholder="https://example.com/skill.zip" />
+          </label>
+          <button type="submit" id="scan-btn">Run Analysis</button>
+        </form>
+        <div class="card-head" style="margin-top:1.2rem">Findings</div>
+        <article id="result" class="result muted">No scan results yet.</article>
+      </div>
+
+      <div class="card" style="display:flex;flex-direction:column;gap:1rem">
+        <div>
+          <div class="card-head">Risk Gauge</div>
+          <canvas id="cv-gauge" style="width:100%;height:200px"></canvas>
+          <div id="risk-level" class="risk-pill hidden" style="text-align:center;margin-top:.5rem"></div>
+        </div>
+        <div>
+          <div class="card-head">Rule Impact</div>
+          <canvas id="cv-hbar" style="width:100%;height:180px"></canvas>
+        </div>
+        <div>
+          <div class="card-head">Threat Intelligence</div>
+          <ul id="ioc-list" class="stack small"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CONSENSUS ─────────────────────────────────────────────────────────── -->
+  <section class="tab-panel hidden" id="tab-consensus">
+    <div class="dash-grid">
+      <div class="card">
+        <div class="card-head">Consensus Input</div>
+        <form id="consensus-form">
+          <label>Skill Name <input id="c-skill_name" required /></label>
+          <label>Publisher  <input id="c-publisher"  required /></label>
+          <label>Instruction Text
+            <textarea id="c-instruction_text" rows="3" required></textarea>
+          </label>
+          <label>URLs <input id="c-urls" /></label>
+          <button type="submit">Run Consensus</button>
+        </form>
+        <div class="card-head" style="margin-top:1rem">Consensus Gauge</div>
+        <canvas id="cv-c-gauge" style="width:100%;height:180px"></canvas>
+        <div id="c-risk-level" class="risk-pill hidden" style="text-align:center;margin-top:.5rem"></div>
+        <p id="c-meta" class="muted small" style="text-align:center;margin-top:.4rem"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">Provider Radar</div>
+        <canvas id="cv-radar" style="width:100%;height:300px"></canvas>
+        <div class="card-head" style="margin-top:1rem">Verdict Table</div>
+        <div id="c-verdicts" class="muted">No consensus run yet.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── BATCH ─────────────────────────────────────────────────────────────── -->
+  <section class="tab-panel hidden" id="tab-batch">
+    <div class="dash-grid">
+      <div class="card">
+        <div class="card-head">Batch Payload</div>
+        <p class="muted small">JSON array of scan requests (max 200). Each: <code>skill_name, publisher, instruction_text, urls</code></p>
+        <textarea id="batch-input" rows="10" placeholder='[{"skill_name":"Skill A","publisher":"pub1","instruction_text":"safe text","urls":[]},{"skill_name":"Skill B","publisher":"hightower6eu","instruction_text":"curl bash decode","urls":["http://evil.io/x.zip"]}]'></textarea>
+        <button id="batch-btn" style="margin-top:.5rem">Run Batch</button>
+      </div>
+      <div class="card">
+        <div class="card-head">Severity Breakdown</div>
+        <canvas id="cv-batch-donut" style="width:100%;height:200px"></canvas>
+        <div class="card-head" style="margin-top:1rem">Score Distribution</div>
+        <canvas id="cv-batch-line" style="width:100%;height:160px"></canvas>
+      </div>
+      <div class="card span-2">
+        <div class="card-head">Results</div>
+        <div id="batch-result" class="muted">No batch run yet.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── REMEDIATE ─────────────────────────────────────────────────────────── -->
+  <section class="tab-panel hidden" id="tab-remediate">
+    <div class="dash-grid">
+      <div class="card">
+        <div class="card-head">Skill Input</div>
+        <form id="remediate-form">
+          <label>Skill Name <input id="r-skill_name" required /></label>
+          <label>Publisher  <input id="r-publisher"  required /></label>
+          <label>Instruction Text
+            <textarea id="r-instruction_text" rows="3" required></textarea>
+          </label>
+          <label>URLs <input id="r-urls" /></label>
+          <button type="submit">Generate Plan</button>
+        </form>
+        <div class="card-head" style="margin-top:1rem">Risk Gauge</div>
+        <canvas id="cv-r-gauge" style="width:100%;height:160px"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-head">Remediation Plan</div>
+        <div id="remediation-result" class="muted">No plan generated yet.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── MODELS ────────────────────────────────────────────────────────────── -->
+  <section class="tab-panel hidden" id="tab-models">
+    <div class="dash-grid">
+      <div class="card span-2">
+        <div class="card-head" style="display:flex;justify-content:space-between;align-items:center">
+          AI Model Registry
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <select id="model-provider-filter" style="width:auto;padding:.3rem .6rem">
+              <option value="">All providers</option>
+            </select>
+            <button class="btn-sm" id="load-models-btn">Reload</button>
           </div>
         </div>
-      </section>
-
-      <!-- CONSENSUS -->
-      <section class="tab-panel hidden" id="tab-consensus">
-        <div class="grid-2">
-          <div class="card span-2">
-            <h2>Multi-Model Consensus Scan</h2>
-            <p class="muted">Fans the scan out to every configured AI provider in parallel and returns a weighted consensus risk score.</p>
-            <form id="consensus-form">
-              <label>Skill Name <input id="c-skill_name" required /></label>
-              <label>Publisher <input id="c-publisher" required /></label>
-              <label>Instruction Text <textarea id="c-instruction_text" rows="3" required></textarea></label>
-              <label>URLs <input id="c-urls" /></label>
-              <button type="submit">Run Consensus</button>
-            </form>
-          </div>
-          <div class="card">
-            <h2>Consensus Score</h2>
-            <div class="meter"><div id="c-meter-fill" class="meter-fill"></div></div>
-            <p id="c-meter-label" class="muted">Awaiting consensus…</p>
-            <div id="c-risk-level" class="risk-level hidden"></div>
-            <p id="c-meta" class="muted small"></p>
-          </div>
-          <div class="card">
-            <h2>Provider Verdicts</h2>
-            <div id="c-verdicts" class="muted">No consensus run yet.</div>
+        <p id="model-stats" class="muted small"></p>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+          <canvas id="cv-model-donut" style="width:260px;height:180px;flex-shrink:0"></canvas>
+          <div style="flex:1;min-width:200px">
+            <canvas id="cv-provider-bar" style="width:100%;height:180px"></canvas>
           </div>
         </div>
-      </section>
+        <div id="model-grid" class="model-grid"></div>
+      </div>
+    </div>
+  </section>
 
-      <!-- BATCH -->
-      <section class="tab-panel hidden" id="tab-batch">
-        <div class="grid-2">
-          <div class="card span-2">
-            <h2>Batch Scan</h2>
-            <p class="muted">Paste a JSON array of scan requests (max 200). Each object needs: <code>skill_name</code>, <code>publisher</code>, <code>instruction_text</code>, <code>urls</code>.</p>
-            <label>JSON Payload<textarea id="batch-input" rows="8" placeholder='[{"skill_name":"Skill A","publisher":"pub1","instruction_text":"safe text","urls":[]},{"skill_name":"Skill B","publisher":"hightower6eu","instruction_text":"curl bash decode","urls":["http://evil.io/x.zip"]}]'></textarea></label>
-            <button id="batch-btn">Run Batch</button>
-          </div>
-          <div class="card span-2">
-            <h2>Batch Results</h2>
-            <div id="batch-result" class="muted">No batch run yet.</div>
+  <!-- ── ALERTS ────────────────────────────────────────────────────────────── -->
+  <section class="tab-panel hidden" id="tab-alerts">
+    <div class="dash-grid">
+      <div class="card">
+        <div class="card-head">Alert Statistics</div>
+        <canvas id="cv-alert-donut" style="width:100%;height:200px"></canvas>
+        <div id="alert-stats" class="muted small" style="margin-top:.5rem"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">Score Trend</div>
+        <canvas id="cv-alert-trend" style="width:100%;height:200px"></canvas>
+      </div>
+      <div class="card span-2">
+        <div class="card-head">Live WebSocket Feed</div>
+        <div id="ws-log" class="ws-log muted">Not connected — click Connect WS in the header.</div>
+      </div>
+      <div class="card span-2">
+        <div class="card-head">Recent Alerts</div>
+        <div id="alert-list" class="muted">No alerts yet.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── THREATS ───────────────────────────────────────────────────────────── -->
+  <section class="tab-panel hidden" id="tab-threats">
+    <div class="dash-grid">
+      <div class="card span-2">
+        <div class="card-head" style="display:flex;justify-content:space-between;align-items:center">
+          Aggregated Threat Feed
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <input id="threat-path" value="." style="width:160px;padding:.3rem .5rem" />
+            <button class="btn-sm" id="threat-scan-btn">Scan</button>
           </div>
         </div>
-      </section>
-
-      <!-- REMEDIATE -->
-      <section class="tab-panel hidden" id="tab-remediate">
-        <div class="grid-2">
-          <div class="card span-2">
-            <h2>Auto-Remediation Planner</h2>
-            <form id="remediate-form">
-              <label>Skill Name <input id="r-skill_name" required /></label>
-              <label>Publisher <input id="r-publisher" required /></label>
-              <label>Instruction Text <textarea id="r-instruction_text" rows="3" required></textarea></label>
-              <label>URLs <input id="r-urls" /></label>
-              <button type="submit">Generate Remediation Plan</button>
-            </form>
-          </div>
-          <div class="card span-2">
-            <h2>Remediation Plan</h2>
-            <div id="remediation-result" class="muted">No plan generated yet.</div>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap">
+          <canvas id="cv-threat-donut" style="width:260px;height:180px;flex-shrink:0"></canvas>
+          <div style="flex:1;min-width:200px">
+            <canvas id="cv-threat-bar" style="width:100%;height:180px"></canvas>
           </div>
         </div>
-      </section>
+      </div>
+      <div class="card span-2">
+        <div class="card-head">Findings</div>
+        <div id="threat-result" class="muted">No threat aggregation run yet.</div>
+      </div>
+    </div>
+  </section>
 
-      <!-- MODELS -->
-      <section class="tab-panel hidden" id="tab-models">
-        <div class="grid-2">
-          <div class="card span-2">
-            <h2>AI Model Registry</h2>
-            <div class="row-flex">
-              <label>Filter by provider
-                <select id="model-provider-filter"><option value="">All providers</option></select>
-              </label>
-              <button id="load-models-btn">Load Models</button>
-            </div>
-            <p id="model-stats" class="muted small"></p>
-            <div id="model-grid" class="model-grid"></div>
-          </div>
-        </div>
-      </section>
+</main>
 
-      <!-- ALERTS -->
-      <section class="tab-panel hidden" id="tab-alerts">
-        <div class="grid-2">
-          <div class="card">
-            <h2>Alert Statistics</h2>
-            <div id="alert-stats" class="muted">Loading…</div>
-          </div>
-          <div class="card">
-            <h2>WebSocket Live Feed <span id="ws-status" class="pill pill-ws small">disconnected</span></h2>
-            <button id="ws-toggle">Connect</button>
-            <div id="ws-log" class="ws-log muted">Not connected.</div>
-          </div>
-          <div class="card span-2">
-            <h2>Recent Alerts</h2>
-            <div id="alert-list" class="muted">No alerts yet.</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- THREATS -->
-      <section class="tab-panel hidden" id="tab-threats">
-        <div class="grid-2">
-          <div class="card span-2">
-            <h2>Aggregated Threat Feed</h2>
-            <p class="muted">Fuses gitleaks + trufflehog + antigravity findings from a repository path.</p>
-            <div class="row-flex">
-              <label>Scan path <input id="threat-path" value="." style="width:200px" /></label>
-              <button id="threat-scan-btn">Aggregate Threats</button>
-            </div>
-          </div>
-          <div class="card span-2">
-            <h2>Findings</h2>
-            <div id="threat-result" class="muted">No threat aggregation run yet.</div>
-          </div>
-        </div>
-      </section>
-
-    </main>
-    <script src="app.js"></script>
-  </body>
+<script type="module" src="app.js"></script>
+</body>
 </html>
