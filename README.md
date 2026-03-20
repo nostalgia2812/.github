@@ -66,3 +66,20 @@ New endpoints:
 
 - Endpoint: `GET /api`
 - Returns the complete list of all exposed endpoints with HTTP method, description, and whether API key protection applies.
+
+## Dashboard modes
+
+The frontend now exposes two views side by side:
+
+- **Defense Console**: the original skill-analysis workflow with scan form, risk meter, findings, rule impact, and IOC list
+- **APOPO System Overview**: a frontend summary of the supplied APOPO architecture, deployment flow, docs map, and benchmark claims, with explicit notes that benchmark numbers are illustrative unless validated in-repo
+
+### View the frontend locally
+
+```bash
+cd frontend
+python -m http.server 8080
+```
+
+Then open `http://localhost:8080` and switch between the two tabs.
+
