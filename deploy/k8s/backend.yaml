@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-skill-defense-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-skill-defense-backend
+  template:
+    metadata:
+      labels:
+        app: ai-skill-defense-backend
+    spec:
+      containers:
+        - name: backend
+          image: ai-skill-defense/backend:latest
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-skill-defense-backend
+spec:
+  selector:
+    app: ai-skill-defense-backend
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
