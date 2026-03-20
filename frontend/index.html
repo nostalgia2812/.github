@@ -3,52 +3,160 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Skill Defense Console</title>
+    <title>AI Skill Defense Console + APOPO System Overview</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="topbar">
+    <header class="topbar shell">
       <div>
-        <h1>AI Skill Defense Dashboard</h1>
-        <p>Deploy-ready dashboard with direct risk visualization for skill screening workflows.</p>
+        <p class="eyebrow">Operator dashboard + integrated system summary</p>
+        <h1>AI Skill Defense Console</h1>
+        <p>
+          Keep the original skill-analysis workflow while adding a high-level APOPO system view that
+          organizes architecture, defensive controls, deployment flow, and clearly labeled benchmark claims.
+        </p>
       </div>
-      <span class="pill">OpenClaw Model</span>
+      <div class="header-pills">
+        <span class="pill">OpenClaw Model</span>
+        <span class="pill">APOPO Overview</span>
+        <span class="pill">March 20, 2026</span>
+      </div>
     </header>
 
-    <main class="layout">
-      <section class="card span-2">
-        <h2>Skill Analysis</h2>
-        <form id="scan-form">
-          <label>Skill Name <input id="skill_name" required /></label>
-          <label>Publisher <input id="publisher" required /></label>
-          <label>Instruction Text <textarea id="instruction_text" rows="4" required></textarea></label>
-          <label>URLs (comma separated) <input id="urls" placeholder="http://example.com/sample.zip" /></label>
-          <button type="submit">Run Analysis</button>
-        </form>
-      </section>
-
-      <section class="card">
-        <h2>Risk Meter</h2>
-        <div class="meter">
-          <div id="meter-fill" class="meter-fill"></div>
+    <main class="shell page-stack">
+      <section class="mode-switch card">
+        <div>
+          <h2>Workspace Modes</h2>
+          <p class="muted">Switch between the live scan console and the APOPO system overview.</p>
         </div>
-        <p id="meter-label" class="muted">Run a scan to visualize risk.</p>
-        <div id="risk-level" class="risk-level hidden"></div>
+        <div class="tablist" role="tablist" aria-label="Dashboard modes">
+          <button id="tab-console" class="tab-button active" type="button" data-tab="console" role="tab" aria-selected="true">
+            Defense Console
+          </button>
+          <button id="tab-apopo" class="tab-button" type="button" data-tab="apopo" role="tab" aria-selected="false">
+            APOPO System Overview
+          </button>
+        </div>
       </section>
 
-      <section class="card span-2">
-        <h2>Findings</h2>
-        <article id="result" class="result muted">No scan results yet.</article>
+      <section id="panel-console" class="tab-panel active" role="tabpanel" aria-labelledby="tab-console">
+        <div class="layout">
+          <section class="card span-2">
+            <h2>Skill Analysis</h2>
+            <form id="scan-form">
+              <label>Skill Name <input id="skill_name" required /></label>
+              <label>Publisher <input id="publisher" required /></label>
+              <label>Instruction Text <textarea id="instruction_text" rows="4" required></textarea></label>
+              <label>URLs (comma separated) <input id="urls" placeholder="http://example.com/sample.zip" /></label>
+              <button type="submit">Run Analysis</button>
+            </form>
+          </section>
+
+          <section class="card">
+            <h2>Risk Meter</h2>
+            <div class="meter">
+              <div id="meter-fill" class="meter-fill"></div>
+            </div>
+            <p id="meter-label" class="muted">Run a scan to visualize risk.</p>
+            <div id="risk-level" class="risk-level hidden"></div>
+          </section>
+
+          <section class="card span-2">
+            <h2>Findings</h2>
+            <article id="result" class="result muted">No scan results yet.</article>
+          </section>
+
+          <section class="card">
+            <h2>Rule Impact</h2>
+            <div id="bars" class="bars muted">No rule matches yet.</div>
+          </section>
+
+          <section class="card">
+            <h2>Threat Intelligence</h2>
+            <ul id="ioc-list" class="stack"></ul>
+          </section>
+        </div>
       </section>
 
-      <section class="card">
-        <h2>Rule Impact</h2>
-        <div id="bars" class="bars muted">No rule matches yet.</div>
-      </section>
+      <section id="panel-apopo" class="tab-panel" role="tabpanel" aria-labelledby="tab-apopo">
+        <div class="layout blueprint-layout">
+          <section class="card hero span-3">
+            <div>
+              <p class="eyebrow">Integrated architecture summary</p>
+              <h2>APOPO System Overview</h2>
+              <p class="muted">
+                This view condenses the supplied system summary into architecture pillars, defensive controls,
+                deployment stages, documentation links, and a benchmark panel labeled as claimed or illustrative
+                unless validated in this repository.
+              </p>
+            </div>
+            <div id="service-flow" class="headline-grid"></div>
+          </section>
 
-      <section class="card">
-        <h2>Threat Intelligence</h2>
-        <ul id="ioc-list" class="stack"></ul>
+          <section class="card span-2">
+            <div class="section-header">
+              <h2>Core Components</h2>
+              <span class="pill subtle">Architecture</span>
+            </div>
+            <div id="service-details" class="fact-grid"></div>
+          </section>
+
+          <section class="card">
+            <div class="section-header">
+              <h2>Trust Notes</h2>
+              <span class="pill subtle">Interpretation</span>
+            </div>
+            <div id="guardrails" class="timeline"></div>
+          </section>
+
+          <section class="card span-2">
+            <div class="section-header">
+              <h2>Deployment Workflow</h2>
+              <span class="pill subtle">Prepare → Build → Verify → Maintain</span>
+            </div>
+            <div id="workflow-grid" class="signal-grid"></div>
+          </section>
+
+          <section class="card">
+            <div class="section-header">
+              <h2>Quick Metrics</h2>
+              <span class="pill subtle">Summary snapshot</span>
+            </div>
+            <div id="blueprint-metrics" class="metrics"></div>
+          </section>
+
+          <section class="card span-2">
+            <div class="section-header">
+              <h2>Reference Paths + Docs</h2>
+              <span class="pill subtle">Filesystem and guides</span>
+            </div>
+            <pre id="filesystem-tree" class="filesystem-tree"></pre>
+          </section>
+
+          <section class="card">
+            <div class="section-header">
+              <h2>Maintenance Checklist</h2>
+              <span class="pill subtle">Ongoing ops</span>
+            </div>
+            <ul id="checklist" class="stack checklist"></ul>
+          </section>
+
+          <section class="card span-2">
+            <div class="section-header">
+              <h2>Conversation Loop Preview</h2>
+              <button id="refresh-loop" type="button">🔄 Generate Exchange</button>
+            </div>
+            <div id="conversation-loop" class="conversation-loop"></div>
+          </section>
+
+          <section class="card">
+            <div class="section-header">
+              <h2>Benchmarks + Commands</h2>
+              <span class="pill subtle">Illustrative</span>
+            </div>
+            <div id="commands" class="command-list"></div>
+          </section>
+        </div>
       </section>
     </main>
 
