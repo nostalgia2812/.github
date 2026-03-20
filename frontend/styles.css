@@ -722,6 +722,67 @@ button {
   cursor: help;
 }
 
+/* ─── Install Listing ──────────────────────────────────────────────────── */
+
+.install-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
+  gap: 0.85rem;
+}
+
+.install-card {
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-soft);
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.install-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.install-card-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.install-row {
+  display: grid;
+  grid-template-columns: 4rem 1fr;
+  gap: 0.4rem;
+  align-items: start;
+}
+
+.install-method {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(37, 99, 235, 0.15);
+  color: #93c5fd;
+  text-align: center;
+  margin-top: 0.15rem;
+}
+
+.install-cmd {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.72rem;
+  color: #cbd5e1;
+  word-break: break-all;
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 6px;
+  padding: 0.25rem 0.5rem;
+  display: block;
+}
+
 .category-filter {
   display: flex;
   flex-wrap: wrap;
@@ -761,7 +822,8 @@ button {
   }
 
   .ghost-control-grid,
-  .tools-grid {
+  .tools-grid,
+  .install-grid {
     grid-template-columns: 1fr;
   }
 

@@ -1031,5 +1031,178 @@ function renderToolsView() {
   renderToolsCatalog();
 }
 
+// ─── Install Listing ───────────────────────────────────────────────────────
+
+const installMethods = {
+  // maps tool name → install commands by method
+  'Gitleaks': {
+    go:     'go install github.com/gitleaks/gitleaks/v8@latest',
+    brew:   'brew install gitleaks',
+    apt:    null,
+    docker: 'docker run --rm -v "$(pwd):/repo" ghcr.io/gitleaks/gitleaks:latest detect --source /repo',
+    pip:    null,
+  },
+  'TruffleHog': {
+    go:     'go install github.com/trufflesecurity/trufflehog/v3@latest',
+    brew:   'brew install trufflehog',
+    apt:    null,
+    docker: 'docker run --rm -it ghcr.io/trufflesecurity/trufflehog:latest',
+    pip:    null,
+  },
+  'Nmap': {
+    go:     null,
+    brew:   'brew install nmap',
+    apt:    'sudo apt-get install -y nmap',
+    docker: 'docker run --rm --network host instrumentisto/nmap',
+    pip:    null,
+  },
+  'Aircrack-ng': {
+    go:     null,
+    brew:   'brew install aircrack-ng',
+    apt:    'sudo apt-get install -y aircrack-ng',
+    docker: null,
+    pip:    null,
+  },
+  'Hydra': {
+    go:     null,
+    brew:   'brew install hydra',
+    apt:    'sudo apt-get install -y hydra',
+    docker: 'docker run --rm vanhauser/hydra',
+    pip:    null,
+  },
+  'Wireshark': {
+    go:     null,
+    brew:   'brew install --cask wireshark',
+    apt:    'sudo apt-get install -y wireshark tshark',
+    docker: 'docker run --rm --net=host lscr.io/linuxserver/wireshark',
+    pip:    null,
+  },
+  'SQLMap': {
+    go:     null,
+    brew:   'brew install sqlmap',
+    apt:    'sudo apt-get install -y sqlmap',
+    docker: 'docker run --rm -it paoloo/sqlmap',
+    pip:    'pip install sqlmap',
+  },
+  'BeEF': {
+    go:     null,
+    brew:   null,
+    apt:    'sudo apt-get install -y beef-xss',
+    docker: 'docker run -p 3000:3000 beefproject/beef',
+    pip:    null,
+  },
+  'Commix': {
+    go:     null,
+    brew:   null,
+    apt:    'sudo apt-get install -y commix',
+    docker: null,
+    pip:    'pip3 install commix',
+  },
+  'OWASP ZAP': {
+    go:     null,
+    brew:   'brew install --cask owasp-zap',
+    apt:    'sudo snap install zaproxy --classic',
+    docker: 'docker pull owasp/zap2docker-stable',
+    pip:    null,
+  },
+  'w3af': {
+    go:     null,
+    brew:   null,
+    apt:    null,
+    docker: 'docker run -it andresriancho/w3af',
+    pip:    'pip3 install -r requirements.txt  # inside cloned repo',
+  },
+  'Nuclei': {
+    go:     'go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest',
+    brew:   'brew install nuclei',
+    apt:    null,
+    docker: 'docker pull projectdiscovery/nuclei',
+    pip:    null,
+  },
+  'DeepDarkCTI': {
+    go:     null,
+    brew:   null,
+    apt:    null,
+    docker: null,
+    pip:    null,
+    git:    'git clone https://github.com/nostalgia2812/deepdarkCTI.git',
+  },
+  'Unblob': {
+    go:     null,
+    brew:   null,
+    apt:    'sudo apt-get install -y lzop zstd lz4 unar  # deps',
+    docker: 'docker pull ghcr.io/onekey-sec/unblob:latest',
+    pip:    'pip3 install unblob',
+  },
+  'Volatility': {
+    go:     null,
+    brew:   null,
+    apt:    null,
+    docker: 'docker pull sk4la/volatility3',
+    pip:    'pip3 install volatility3',
+    git:    'git clone https://github.com/volatilityfoundation/volatility3.git',
+  },
+  'Hashcat': {
+    go:     null,
+    brew:   'brew install hashcat',
+    apt:    'sudo apt-get install -y hashcat',
+    docker: 'docker pull dizcza/docker-hashcat',
+    pip:    null,
+  },
+  'ADK Python': {
+    go:     null,
+    brew:   null,
+    apt:    null,
+    docker: null,
+    pip:    'pip install google-adk',
+  },
+  'Firebase Framework Tools': {
+    go:     null,
+    brew:   null,
+    apt:    null,
+    docker: null,
+    pip:    null,
+    npm:    'npm install -g firebase-tools',
+  },
+  'Book of Secret Knowledge': {
+    go:     null,
+    brew:   null,
+    apt:    null,
+    docker: null,
+    pip:    null,
+    git:    'git clone https://github.com/nostalgia2812/the-book-of-secret-knowledge.git',
+  },
+};
+
+function renderInstallListing() {
+  const el = document.getElementById('tools-install-listing');
+  if (!el) return;
+
+  const methodIcons = { go: 'Go', brew: 'Brew', apt: 'APT', docker: 'Docker', pip: 'pip', npm: 'npm', git: 'git' };
+
+  el.innerHTML = toolsCatalog
+    .map((tool) => {
+      const methods = installMethods[tool.name] || {};
+      const cmds = Object.entries(methods)
+        .filter(([, cmd]) => cmd)
+        .map(([method, cmd]) => `<div class="install-row"><span class="install-method">${methodIcons[method] || method}</span><code class="install-cmd">${cmd}</code></div>`)
+        .join('');
+      return `
+        <article class="install-card">
+          <div class="install-card-header">
+            <h3>${tool.name}</h3>
+            <div>
+              <span class="priority-pill ${priorityClass(tool.priority)}">${tool.priority}</span>
+              <span class="lang-badge lang-${langAccent(tool.language)}" style="margin-left:0.3rem">${tool.language}</span>
+            </div>
+          </div>
+          ${cmds || '<p class="muted" style="font-size:0.82rem;margin:0">Clone from source — see repo for instructions.</p>'}
+        </article>
+      `;
+    })
+    .join('');
+}
+
 renderGhostDashboard();
 renderToolsView();
+renderInstallListing();
