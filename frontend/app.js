@@ -315,3 +315,397 @@ loadIocs();
 renderApopoView();
 generateLoop();
 document.getElementById('refresh-loop').addEventListener('click', generateLoop);
+
+// ─── Ghost Dashboard ───────────────────────────────────────────────────────
+
+const ghostServices = [
+  {
+    name: 'GHOST AI Command Center',
+    accent: 'violet',
+    status: 'online',
+    detail: 'Central orchestration dashboard',
+    summary: 'Aggregates logs, controls, and status across AI, coding, and response services.',
+    version: 'v2.4.1',
+  },
+  {
+    name: 'Armageddon Engine',
+    accent: 'amber',
+    status: 'online',
+    detail: 'Threat simulation + response',
+    summary: 'Models threats, coordinates alerts, and supports defensive response workflows.',
+    version: 'v1.9.0',
+  },
+  {
+    name: 'Mistral Studio',
+    accent: 'cyan',
+    status: 'online',
+    detail: 'Secure coding environment',
+    summary: 'Coding runtime, prompt governance, and constrained execution layer.',
+    version: 'v3.1.2',
+  },
+  {
+    name: 'Claude / Roo / Kimi',
+    accent: 'violet',
+    status: 'online',
+    detail: 'Developer tooling integration',
+    summary: 'Local developer workflows, editor integration, and model configuration paths.',
+    version: 'v1.0.0',
+  },
+];
+
+const ghostControls = [
+  { label: 'Restart Orchestrator', action: 'docker-compose restart ghost_ai', icon: '↺' },
+  { label: 'Rebuild All Containers', action: 'docker-compose build --no-cache', icon: '⚙' },
+  { label: 'Check Health Endpoints', action: 'curl -s localhost:3000/health', icon: '♥' },
+  { label: 'Tail All Logs', action: 'docker-compose logs -f', icon: '☰' },
+  { label: 'Run Defensive Sim', action: 'python3 armageddon/simulate.py --mode defensive', icon: '🛡' },
+  { label: 'Export Audit Report', action: 'python3 scripts/export_audit.py', icon: '↗' },
+];
+
+const ghostSystemMetrics = [
+  { label: 'Services Online', value: '4 / 4' },
+  { label: 'Active Sessions', value: '12' },
+  { label: 'Alerts (24h)', value: '3' },
+  { label: 'Uptime', value: '99.8%' },
+];
+
+function makeLogEntry(level, service, msg) {
+  const now = new Date();
+  const ts = now.toTimeString().slice(0, 8);
+  return { ts, level, service, msg };
+}
+
+const ghostLogSeed = [
+  makeLogEntry('INFO', 'GHOST Core', 'Orchestrator heartbeat OK — all subsystems nominal.'),
+  makeLogEntry('INFO', 'Armageddon', 'Threat model refresh complete. 0 new IOCs detected.'),
+  makeLogEntry('WARN', 'Mistral Studio', 'Rate limit approached on coding endpoint — throttling active.'),
+  makeLogEntry('INFO', 'Toolchain', 'Claude integration re-authenticated successfully.'),
+  makeLogEntry('INFO', 'GHOST Core', 'Audit log snapshot exported to /data/audit/2026-03-20.json.'),
+  makeLogEntry('INFO', 'Armageddon', 'Defensive simulation run complete — no policy violations.'),
+  makeLogEntry('INFO', 'Mistral Studio', 'New coding session started by operator.'),
+  makeLogEntry('INFO', 'GHOST Core', 'Config reload triggered — zero downtime.'),
+];
+
+function renderGhostDashboard() {
+  // services
+  document.getElementById('ghost-services').innerHTML = ghostServices
+    .map(
+      (svc) => `
+      <article class="headline-card accent-${svc.accent}">
+        <div class="service-status-row">
+          <span class="status-dot status-${svc.status}"></span>
+          <span class="flow-step">${svc.detail} · ${svc.version}</span>
+        </div>
+        <h3>${svc.name}</h3>
+        <p class="muted">${svc.summary}</p>
+      </article>
+    `,
+    )
+    .join('');
+
+  // controls
+  document.getElementById('ghost-controls').innerHTML = ghostControls
+    .map(
+      (ctrl) => `
+      <button type="button" class="ghost-ctrl-btn" title="${ctrl.action}">
+        <span class="ctrl-icon">${ctrl.icon}</span>
+        <span>${ctrl.label}</span>
+        <code class="ctrl-cmd">${ctrl.action}</code>
+      </button>
+    `,
+    )
+    .join('');
+
+  // metrics
+  document.getElementById('ghost-metrics').innerHTML = ghostSystemMetrics
+    .map(
+      (m) => `
+      <div class="metric-card">
+        <span>${m.label}</span>
+        <strong>${m.value}</strong>
+      </div>
+    `,
+    )
+    .join('');
+
+  document.getElementById('ghost-uptime-pill').textContent = 'Uptime 99.8%';
+
+  renderGhostLog(ghostLogSeed);
+}
+
+function renderGhostLog(entries) {
+  document.getElementById('ghost-log-count').textContent = `${entries.length} entries`;
+  document.getElementById('ghost-log').innerHTML = entries
+    .map(
+      (e) => `
+      <div class="log-entry log-${e.level.toLowerCase()}">
+        <span class="log-ts">${e.ts}</span>
+        <span class="log-level">${e.level}</span>
+        <span class="log-service">${e.service}</span>
+        <span class="log-msg">${e.msg}</span>
+      </div>
+    `,
+    )
+    .join('');
+}
+
+function refreshGhostLog() {
+  const extra = makeLogEntry('INFO', 'GHOST Core', `Manual refresh triggered at ${new Date().toTimeString().slice(0, 8)}.`);
+  renderGhostLog([extra, ...ghostLogSeed]);
+}
+
+document.getElementById('ghost-refresh').addEventListener('click', refreshGhostLog);
+
+// ─── Tools Integration ─────────────────────────────────────────────────────
+
+const toolsCatalog = [
+  {
+    name: 'Gitleaks',
+    repo: 'nostalgia2812/gitleaks',
+    category: 'Secret Scanning',
+    language: 'Go',
+    license: 'MIT',
+    priority: 'critical',
+    status: 'Production',
+    description: 'SAST tool for detecting hardcoded secrets, API keys, and tokens in git repositories.',
+    docker: 'docker run --rm -v "$(pwd):/repo" ghcr.io/gitleaks/gitleaks:latest detect --source /repo',
+    quickstart: 'gitleaks detect --source . --verbose',
+  },
+  {
+    name: 'TruffleHog',
+    repo: 'nostalgia2812/trufflehog',
+    category: 'Secret Scanning',
+    language: 'Go',
+    license: 'AGPL-3.0',
+    priority: 'critical',
+    status: 'Production',
+    description: 'Searches git history for secrets with 700+ credential detectors and real-time verification.',
+    docker: 'docker run --rm -it ghcr.io/trufflesecurity/trufflehog:latest git file:///pwd --only-verified',
+    quickstart: 'trufflehog git file://. --since-commit HEAD~10 --only-verified',
+  },
+  {
+    name: 'Aircrack-ng',
+    repo: 'nostalgia2812/aircrack-ng',
+    category: 'Network Security',
+    language: 'C',
+    license: 'GPL-2.0',
+    priority: 'high',
+    status: 'Production',
+    description: 'Complete WiFi network security assessment suite — monitoring, testing, and WPA/WEP cracking.',
+    docker: null,
+    quickstart: 'sudo airmon-ng start wlan0 && sudo airodump-ng wlan0mon',
+  },
+  {
+    name: 'BeEF',
+    repo: 'nostalgia2812/beef',
+    category: 'Web App Testing',
+    language: 'Ruby',
+    license: 'Apache-2.0',
+    priority: 'high',
+    status: 'Production',
+    description: 'Browser Exploitation Framework — hooks browsers and runs 300+ attack modules via JavaScript.',
+    docker: 'docker run -p 3000:3000 beefproject/beef',
+    quickstart: './beef  # UI at http://127.0.0.1:3000/ui/panel',
+  },
+  {
+    name: 'Commix',
+    repo: 'nostalgia2812/commix',
+    category: 'Web App Testing',
+    language: 'Python',
+    license: 'GPL-3.0',
+    priority: 'high',
+    status: 'Production',
+    description: 'Automated all-in-one OS command injection and exploitation tool for web applications.',
+    docker: null,
+    quickstart: 'python3 commix.py --url="http://target.com/page.php?id=1"',
+  },
+  {
+    name: 'w3af',
+    repo: 'nostalgia2812/w3af',
+    category: 'Web App Testing',
+    language: 'Python',
+    license: 'GPL-2.0',
+    priority: 'high',
+    status: 'Stable',
+    description: 'Web Application Attack and Audit Framework with 200+ plugins for vulnerability detection.',
+    docker: 'docker run -it andresriancho/w3af',
+    quickstart: 'python3 w3af_console',
+  },
+  {
+    name: 'DeepDarkCTI',
+    repo: 'nostalgia2812/deepdarkCTI',
+    category: 'Threat Intelligence',
+    language: 'Markdown',
+    license: 'MIT',
+    priority: 'medium',
+    status: 'Production',
+    description: 'Cyber threat intelligence from deep/dark web — ransomware sites, forums, IOC feeds.',
+    docker: null,
+    quickstart: 'git clone https://github.com/nostalgia2812/deepdarkCTI.git',
+  },
+  {
+    name: 'Unblob',
+    repo: 'nostalgia2812/unblob',
+    category: 'Firmware Analysis',
+    language: 'Python',
+    license: 'MIT',
+    priority: 'medium',
+    status: 'Production',
+    description: 'Extracts files from firmware images and binary blobs — 50+ supported formats.',
+    docker: 'docker run --rm -v /path:/data ghcr.io/onekey-sec/unblob:latest /data/firmware.bin',
+    quickstart: 'unblob -e /output firmware.bin',
+  },
+  {
+    name: 'ADK Python',
+    repo: 'nostalgia2812/adk-python',
+    category: 'Dev Frameworks',
+    language: 'Python',
+    license: 'Apache-2.0',
+    priority: 'medium',
+    status: 'Beta',
+    description: "Google's Agent Development Kit for building multi-agent AI systems with Gemini.",
+    docker: null,
+    quickstart: 'pip install google-adk',
+  },
+  {
+    name: 'Firebase Framework Tools',
+    repo: 'nostalgia2812/firebase-framework-tools',
+    category: 'Dev Frameworks',
+    language: 'TypeScript',
+    license: 'Apache-2.0',
+    priority: 'medium',
+    status: 'Beta',
+    description: 'Integrate Next.js, Angular, Nuxt, and other web frameworks with Firebase Hosting.',
+    docker: null,
+    quickstart: 'firebase deploy --only hosting',
+  },
+  {
+    name: 'Book of Secret Knowledge',
+    repo: 'nostalgia2812/the-book-of-secret-knowledge',
+    category: 'Knowledge Bases',
+    language: 'Markdown',
+    license: 'MIT',
+    priority: 'low',
+    status: 'Production',
+    description: 'Curated collection of CLI tools, cheatsheets, one-liners, and references for IT practitioners.',
+    docker: null,
+    quickstart: 'git clone https://github.com/nostalgia2812/the-book-of-secret-knowledge.git',
+  },
+];
+
+const toolCategories = ['All', ...Array.from(new Set(toolsCatalog.map((t) => t.category)))];
+
+const toolsPipeline = [
+  { title: 'Commit → Gitleaks', text: 'Pre-commit hook blocks commits containing hardcoded secrets.' },
+  { title: 'PR → TruffleHog', text: 'CI full-history scan runs on every pull request.' },
+  { title: 'Deploy → w3af / Commix', text: 'Web vulnerability scan on staging before production push.' },
+  { title: 'Runtime → DeepDarkCTI', text: 'Threat intelligence enrichment correlates live alerts.' },
+  { title: 'Firmware → Unblob', text: 'Binary blob extraction feeds into static analysis pipelines.' },
+  { title: 'Report', text: 'Consolidated findings exported to SIEM / ticketing.' },
+];
+
+const toolsDockerSnippets = toolsCatalog
+  .filter((t) => t.docker)
+  .map((t) => `# ${t.name}\n${t.docker}`);
+
+let activeToolCategory = 'All';
+
+function priorityClass(p) {
+  return { critical: 'priority-critical', high: 'priority-high', medium: 'priority-medium', low: 'priority-low' }[p] || '';
+}
+
+function langAccent(lang) {
+  return { Go: 'cyan', Python: 'violet', Ruby: 'amber', C: 'amber', TypeScript: 'cyan', Markdown: 'muted' }[lang] || '';
+}
+
+function renderToolsCatalog(category) {
+  const filtered = category === 'All' ? toolsCatalog : toolsCatalog.filter((t) => t.category === category);
+  document.getElementById('tools-visible-count').textContent = `${filtered.length} of ${toolsCatalog.length} tools`;
+
+  document.getElementById('tools-catalog').innerHTML = filtered
+    .map(
+      (tool) => `
+      <article class="tool-card">
+        <div class="tool-card-header">
+          <div>
+            <h3 class="tool-name">${tool.name}</h3>
+            <span class="tool-repo muted">${tool.repo}</span>
+          </div>
+          <div class="tool-badges">
+            <span class="priority-pill ${priorityClass(tool.priority)}">${tool.priority}</span>
+            <span class="lang-badge lang-${langAccent(tool.language)}">${tool.language}</span>
+          </div>
+        </div>
+        <p class="tool-desc muted">${tool.description}</p>
+        <div class="tool-meta-row">
+          <span class="pill subtle">${tool.category}</span>
+          <span class="pill subtle">${tool.license}</span>
+          <span class="pill subtle status-pill-${tool.status.toLowerCase().replace(' ', '-')}">${tool.status}</span>
+        </div>
+        <pre class="tool-quickstart">${tool.quickstart}</pre>
+      </article>
+    `,
+    )
+    .join('');
+}
+
+function renderToolsView() {
+  // summary metrics
+  const byPriority = (p) => toolsCatalog.filter((t) => t.priority === p).length;
+  document.getElementById('tools-summary-metrics').innerHTML = [
+    { label: 'Critical', value: byPriority('critical') },
+    { label: 'High Priority', value: byPriority('high') },
+    { label: 'Medium Priority', value: byPriority('medium') },
+    { label: 'Docker-Ready', value: toolsCatalog.filter((t) => t.docker).length },
+  ]
+    .map(
+      (m) => `
+      <div class="metric-card">
+        <span>${m.label}</span>
+        <strong>${m.value}</strong>
+      </div>
+    `,
+    )
+    .join('');
+
+  // category filter
+  document.getElementById('tools-filter').innerHTML = toolCategories
+    .map(
+      (cat) => `
+      <button type="button" class="category-btn${cat === activeToolCategory ? ' active' : ''}" data-cat="${cat}">
+        ${cat}
+      </button>
+    `,
+    )
+    .join('');
+
+  document.querySelectorAll('.category-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      activeToolCategory = btn.dataset.cat;
+      document.querySelectorAll('.category-btn').forEach((b) => b.classList.toggle('active', b.dataset.cat === activeToolCategory));
+      renderToolsCatalog(activeToolCategory);
+    });
+  });
+
+  // pipeline
+  document.getElementById('tools-pipeline').innerHTML = toolsPipeline
+    .map(
+      (step) => `
+      <article class="signal-card">
+        <h3>${step.title}</h3>
+        <p>${step.text}</p>
+      </article>
+    `,
+    )
+    .join('');
+
+  // docker snippets
+  document.getElementById('tools-docker').innerHTML = toolsDockerSnippets
+    .map((snip) => `<pre>${snip}</pre>`)
+    .join('');
+
+  renderToolsCatalog(activeToolCategory);
+}
+
+renderGhostDashboard();
+renderToolsView();

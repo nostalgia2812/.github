@@ -36,6 +36,12 @@
           <button id="tab-apopo" class="tab-button" type="button" data-tab="apopo" role="tab" aria-selected="false">
             APOPO System Overview
           </button>
+          <button id="tab-ghost" class="tab-button" type="button" data-tab="ghost" role="tab" aria-selected="false">
+            Ghost Dashboard
+          </button>
+          <button id="tab-tools" class="tab-button" type="button" data-tab="tools" role="tab" aria-selected="false">
+            Tools Integration
+          </button>
         </div>
       </section>
 
@@ -155,6 +161,107 @@
               <span class="pill subtle">Illustrative</span>
             </div>
             <div id="commands" class="command-list"></div>
+          </section>
+        </div>
+      </section>
+      <!-- Ghost Dashboard Panel -->
+      <section id="panel-ghost" class="tab-panel" role="tabpanel" aria-labelledby="tab-ghost">
+        <div class="layout">
+          <section class="card span-3">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">GHOST AI Command Center</p>
+                <h2>Ghost Dashboard</h2>
+              </div>
+              <div class="header-pills">
+                <span id="ghost-uptime-pill" class="pill"></span>
+                <button id="ghost-refresh" type="button" style="width:auto">↺ Refresh</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="card span-3">
+            <div class="section-header">
+              <h2>Service Health</h2>
+              <span class="pill subtle">Live status</span>
+            </div>
+            <div id="ghost-services" class="headline-grid"></div>
+          </section>
+
+          <section class="card span-2">
+            <div class="section-header">
+              <h2>Orchestration Controls</h2>
+              <span class="pill subtle">Quick actions</span>
+            </div>
+            <div id="ghost-controls" class="ghost-control-grid"></div>
+          </section>
+
+          <section class="card">
+            <div class="section-header">
+              <h2>System Metrics</h2>
+              <span class="pill subtle">Live snapshot</span>
+            </div>
+            <div id="ghost-metrics" class="metrics"></div>
+          </section>
+
+          <section class="card span-3">
+            <div class="section-header">
+              <h2>Activity Log</h2>
+              <span id="ghost-log-count" class="pill subtle"></span>
+            </div>
+            <div id="ghost-log" class="log-feed"></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Tools Integration Panel -->
+      <section id="panel-tools" class="tab-panel" role="tabpanel" aria-labelledby="tab-tools">
+        <div class="layout">
+          <section class="card span-3">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">nostalgia2812 Organization</p>
+                <h2>Security Tools Integration</h2>
+              </div>
+              <div class="header-pills">
+                <span class="pill">11 Tools</span>
+                <span class="pill">7 Categories</span>
+                <span class="pill">Branch: claude/tooling-filing-system-uG7Gs</span>
+              </div>
+            </div>
+            <div id="tools-summary-metrics" class="metrics" style="margin-top:0.75rem"></div>
+          </section>
+
+          <section class="card span-3">
+            <div class="section-header">
+              <h2>Filter by Category</h2>
+              <span class="pill subtle">Select to narrow view</span>
+            </div>
+            <div id="tools-filter" class="category-filter"></div>
+          </section>
+
+          <section class="card span-3">
+            <div class="section-header">
+              <h2>Tool Catalog</h2>
+              <span id="tools-visible-count" class="pill subtle"></span>
+            </div>
+            <div id="tools-catalog" class="tools-grid"></div>
+          </section>
+
+          <section class="card span-2">
+            <div class="section-header">
+              <h2>Integration Pipeline</h2>
+              <span class="pill subtle">Recommended workflow</span>
+            </div>
+            <div id="tools-pipeline" class="signal-grid"></div>
+          </section>
+
+          <section class="card">
+            <div class="section-header">
+              <h2>Docker Quick Run</h2>
+              <span class="pill subtle">Container-ready tools</span>
+            </div>
+            <div id="tools-docker" class="command-list"></div>
           </section>
         </div>
       </section>
