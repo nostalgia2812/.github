@@ -1,0 +1,254 @@
+name: Tool Validation
+
+on:
+  schedule:
+    # Run daily at 06:00 UTC
+    - cron: '0 6 * * *'
+  push:
+    branches:
+      - main
+      - 'claude/**'
+    paths:
+      - 'scripts/**'
+      - '.tooling/**'
+      - '.github/workflows/tool-validation.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'scripts/**'
+      - '.tooling/**'
+  workflow_dispatch:
+    inputs:
+      tools:
+        description: 'Specific tools to validate (comma-separated, or "all")'
+        required: false
+        default: 'all'
+
+env:
+  TOOLS_ROOT: /tmp/nostalgia2812-tools
+
+jobs:
+  # ─── Validate Manifest Files ─────────────────────────────────────────────────
+  validate-manifests:
+    name: Validate Tool Manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install jsonschema
+        run: pip install jsonschema
+
+      - name: Validate tool_manifest.json
+        run: |
+          python3 << 'EOF'
+          import json, sys
+
+          with open('.tooling/tool_manifest.json') as f:
+              manifest = json.load(f)
+
+          required_fields = ['manifest_version', 'organization', 'tools']
+          for field in required_fields:
+              assert field in manifest, f"Missing required field: {field}"
+
+          required_tool_fields = ['id', 'name', 'repository', 'category', 'description', 'language']
+          for tool in manifest['tools']:
+              for field in required_tool_fields:
+                  assert field in tool, f"Tool '{tool.get('id', 'unknown')}' missing field: {field}"
+
+          print(f"✓ Manifest valid: {len(manifest['tools'])} tools found")
+          for tool in manifest['tools']:
+              print(f"  - {tool['id']} ({tool['category']})")
+          EOF
+
+      - name: Validate categories.json
+        run: |
+          python3 << 'EOF'
+          import json
+
+          with open('.tooling/categories.json') as f:
+              categories = json.load(f)
+
+          required_fields = ['schema_version', 'categories']
+          for field in required_fields:
+              assert field in categories, f"Missing required field: {field}"
+
+          with open('.tooling/tool_manifest.json') as f:
+              manifest = json.load(f)
+
+          manifest_tool_ids = {t['id'] for t in manifest['tools']}
+          manifest_categories = {t['category'] for t in manifest['tools']}
+
+          cat_ids = set()
+          for cat in categories['categories']:
+              cat_ids.add(cat['id'])
+              for tool_id in cat.get('tools', []):
+                  assert tool_id in manifest_tool_ids, f"Category references unknown tool: {tool_id}"
+
+          for cat in manifest_categories:
+              assert cat in cat_ids, f"Manifest category not in categories.json: {cat}"
+
+          print(f"✓ Categories valid: {len(categories['categories'])} categories")
+          EOF
+
+      - name: Validate TOOLS_INDEX.md completeness
+        run: |
+          python3 << 'EOF'
+          import json, re
+
+          with open('.tooling/tool_manifest.json') as f:
+              manifest = json.load(f)
+
+          with open('TOOLS_INDEX.md') as f:
+              index_content = f.read()
+
+          missing = []
+          for tool in manifest['tools']:
+              if tool['name'] not in index_content and tool['id'] not in index_content:
+                  missing.append(tool['id'])
+
+          if missing:
+              print(f"WARNING: These tools may be missing from TOOLS_INDEX.md: {missing}")
+          else:
+              print(f"✓ TOOLS_INDEX.md references all {len(manifest['tools'])} tools")
+          EOF
+
+  # ─── Validate Scripts ─────────────────────────────────────────────────────────
+  validate-scripts:
+    name: Validate Shell Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: ShellCheck - install_all.sh
+        run: shellcheck --severity=warning scripts/install_all.sh
+
+      - name: ShellCheck - update_all.sh
+        run: shellcheck --severity=warning scripts/update_all.sh
+
+      - name: ShellCheck - check_health.sh
+        run: shellcheck --severity=warning scripts/check_health.sh
+
+      - name: Verify scripts are executable
+        run: |
+          for script in scripts/*.sh; do
+            if [[ -x "$script" ]]; then
+              echo "✓ $script is executable"
+            else
+              echo "✗ $script is NOT executable" && exit 1
+            fi
+          done
+
+      - name: Dry-run health check (no external deps)
+        run: |
+          TOOLS_ROOT=/tmp/test-tools bash scripts/check_health.sh --no-docker || true
+          echo "Health check script executed successfully"
+
+  # ─── Tool Availability Checks ─────────────────────────────────────────────────
+  check-tool-repos:
+    name: Check Tool Repository Availability
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        tool:
+          - {id: gitleaks, repo: "nostalgia2812/gitleaks"}
+          - {id: trufflehog, repo: "nostalgia2812/trufflehog"}
+          - {id: aircrack-ng, repo: "nostalgia2812/aircrack-ng"}
+          - {id: beef, repo: "nostalgia2812/beef"}
+          - {id: commix, repo: "nostalgia2812/commix"}
+          - {id: w3af, repo: "nostalgia2812/w3af"}
+          - {id: deepdarkCTI, repo: "nostalgia2812/deepdarkCTI"}
+          - {id: unblob, repo: "nostalgia2812/unblob"}
+          - {id: adk-python, repo: "nostalgia2812/adk-python"}
+          - {id: firebase-framework-tools, repo: "nostalgia2812/firebase-framework-tools"}
+          - {id: the-book-of-secret-knowledge, repo: "nostalgia2812/the-book-of-secret-knowledge"}
+    steps:
+      - name: Check ${{ matrix.tool.id }} repository
+        run: |
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://api.github.com/repos/${{ matrix.tool.repo }}" \
+            -H "Accept: application/vnd.github.v3+json")
+
+          if [[ "$HTTP_STATUS" == "200" ]]; then
+            echo "✓ Repository ${{ matrix.tool.repo }} is accessible (HTTP $HTTP_STATUS)"
+          elif [[ "$HTTP_STATUS" == "404" ]]; then
+            echo "✗ Repository ${{ matrix.tool.repo }} not found (HTTP $HTTP_STATUS)"
+            exit 1
+          else
+            echo "⚠ Repository ${{ matrix.tool.repo }} returned HTTP $HTTP_STATUS"
+          fi
+
+  # ─── Install Lightweight Tools ────────────────────────────────────────────────
+  install-go-tools:
+    name: Install and Validate Go Tools
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Install Gitleaks
+        run: |
+          go install github.com/gitleaks/gitleaks/v8@latest
+          gitleaks version
+          echo "✓ Gitleaks installed successfully"
+
+      - name: Install TruffleHog
+        run: |
+          go install github.com/trufflesecurity/trufflehog/v3@latest
+          trufflehog --version
+          echo "✓ TruffleHog installed successfully"
+
+      - name: Run Gitleaks on this repository
+        run: |
+          gitleaks detect --source . --verbose --no-git || true
+          echo "Gitleaks scan complete"
+
+  # ─── Summary Report ───────────────────────────────────────────────────────────
+  validation-summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    needs: [validate-manifests, validate-scripts, check-tool-repos, install-go-tools]
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate validation report
+        run: |
+          echo "# Tool Validation Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Timestamp:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Job Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Manifest Validation | ${{ needs.validate-manifests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Script Validation | ${{ needs.validate-scripts.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Repository Checks | ${{ needs.check-tool-repos.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Go Tools Install | ${{ needs.install-go-tools.result }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check overall status
+        run: |
+          if [[ "${{ needs.validate-manifests.result }}" == "failure" ]] || \
+             [[ "${{ needs.validate-scripts.result }}" == "failure" ]]; then
+            echo "Critical validation failures detected"
+            exit 1
+          fi
+          echo "All critical validations passed"

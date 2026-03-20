@@ -1,0 +1,90 @@
+# =============================================================================
+# gitleaks.toml - Standardized Gitleaks configuration for nostalgia2812 org
+# =============================================================================
+# Part of the nostalgia2812 tooling and filing system
+# Branch: claude/tooling-filing-system-uG7Gs
+# =============================================================================
+
+title = "nostalgia2812 Gitleaks Configuration"
+
+[extend]
+# Extend the default ruleset
+useDefault = true
+
+# ─── Global Allow-lists ───────────────────────────────────────────────────────
+[allowlist]
+description = "Global allowlist for nostalgia2812 repositories"
+
+# Ignore test/example files
+paths = [
+  '''(^|/)test[s]?/''',
+  '''(^|/)spec/''',
+  '''(^|/)fixtures/''',
+  '''(^|/)examples?/''',
+  '''\.test\.(js|ts|py|rb|go)$''',
+  '''_test\.(js|ts|py|rb|go)$''',
+  '''(^|/)docs?/''',
+  '''(^|/)TOOLS_INDEX\.md$''',
+]
+
+# Ignore known-safe patterns
+regexes = [
+  # Placeholder/example values
+  '''(?i)(example|placeholder|dummy|fake|test|sample|your[-_]?)(key|token|secret|password|api[-_]?key)''',
+  # Template variables
+  '''\$\{[A-Z_]+\}''',
+  '''\{\{[^}]+\}\}''',
+  # Common false positives for security tools
+  '''AKIAIOSFODNN7EXAMPLE''',
+  # Markdown code blocks with examples
+  '''```[^`]*EXAMPLE[^`]*```''',
+]
+
+# ─── Custom Rules ─────────────────────────────────────────────────────────────
+
+[[rules]]
+id = "nostalgia2812-internal-token"
+description = "nostalgia2812 internal API token"
+regex = '''nos[0-9a-f]{32,64}'''
+tags = ["internal", "token", "high-severity"]
+
+[[rules]]
+id = "private-key-file"
+description = "Private key file detected"
+regex = '''-----BEGIN (RSA|EC|DSA|OPENSSH) PRIVATE KEY-----'''
+tags = ["private-key", "critical"]
+
+[[rules]]
+id = "github-pat-classic"
+description = "GitHub Personal Access Token (classic)"
+regex = '''ghp_[A-Za-z0-9]{36}'''
+tags = ["github", "token", "critical"]
+
+[[rules]]
+id = "github-pat-fine-grained"
+description = "GitHub Fine-grained Personal Access Token"
+regex = '''github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}'''
+tags = ["github", "token", "critical"]
+
+[[rules]]
+id = "firebase-config"
+description = "Firebase configuration with API key"
+regex = '''apiKey:\s*["']AIza[0-9A-Za-z\-_]{35}["']'''
+tags = ["firebase", "api-key", "high"]
+
+# ─── Severity Overrides ───────────────────────────────────────────────────────
+
+# High severity - immediately actionable
+[[rules]]
+id = "aws-access-key-id"
+description = "AWS Access Key ID"
+regex = '''(?:A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}'''
+tags = ["aws", "key", "critical"]
+severity = "CRITICAL"
+
+[[rules]]
+id = "slack-bot-token"
+description = "Slack Bot Token"
+regex = '''xoxb-[0-9]{11,13}-[0-9]{11,13}-[a-zA-Z0-9]{24}'''
+tags = ["slack", "token", "high"]
+severity = "HIGH"

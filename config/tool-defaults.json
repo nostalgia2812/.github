@@ -1,0 +1,85 @@
+{
+  "_comment": "Default configuration values for all tools in the nostalgia2812 organization",
+  "_version": "1.0.0",
+  "_branch": "claude/tooling-filing-system-uG7Gs",
+
+  "global": {
+    "organization": "nostalgia2812",
+    "tools_root": "${HOME}/nostalgia2812-tools",
+    "log_level": "INFO",
+    "parallel_jobs": 4,
+    "timeout_seconds": 300,
+    "retry_attempts": 3,
+    "retry_delay_seconds": 5
+  },
+
+  "gitleaks": {
+    "config": "config/gitleaks.toml",
+    "redact": true,
+    "verbose": false,
+    "log_opts": "--all",
+    "report_format": "json",
+    "exit_code": 1,
+    "max_target_megabytes": 50
+  },
+
+  "trufflehog": {
+    "only_verified": false,
+    "include_detectors": [],
+    "exclude_detectors": [],
+    "concurrency": 8,
+    "json_legacy": false,
+    "log_level": 2
+  },
+
+  "aircrack_ng": {
+    "wordlist": "/usr/share/wordlists/rockyou.txt",
+    "cpu_priority": 0,
+    "show_wep_stats": false
+  },
+
+  "unblob": {
+    "extract_root": "unblob-output",
+    "depth": 10,
+    "entropy_depth": 1,
+    "verbose": false,
+    "skip_extension": [],
+    "process_count": 4
+  },
+
+  "commix": {
+    "level": 2,
+    "risk": 1,
+    "threads": 1,
+    "timeout": 30,
+    "retries": 3,
+    "user_agent": "commix/stable",
+    "random_agent": true
+  },
+
+  "w3af": {
+    "plugins": {
+      "audit": ["xss", "sqli", "os_commanding", "path_traversal", "csrf"],
+      "crawl": ["web_spider"],
+      "output": ["html_file", "xml_file", "console"]
+    },
+    "threads": 10,
+    "timeout": 30
+  },
+
+  "health_check": {
+    "check_docker": true,
+    "check_versions": true,
+    "output_format": "text",
+    "exit_on_failure": false
+  },
+
+  "ci_cd": {
+    "fail_on_secret_detection": true,
+    "fail_on_high_severity": true,
+    "fail_on_critical_severity": true,
+    "scan_full_history_on_schedule": true,
+    "upload_sarif": true,
+    "create_pr_comment": true
+  }
+}

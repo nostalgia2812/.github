@@ -1,0 +1,80 @@
+# =============================================================================
+# pre-commit-config.yaml - Standardized pre-commit hooks for nostalgia2812 org
+# =============================================================================
+# Part of the nostalgia2812 tooling and filing system
+# Branch: claude/tooling-filing-system-uG7Gs
+#
+# Usage:
+#   cp config/pre-commit-config.yaml .pre-commit-config.yaml
+#   pre-commit install
+# =============================================================================
+
+repos:
+  # ─── Secret Scanning ──────────────────────────────────────────────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+        name: Gitleaks Secret Scanner
+        description: Detect hardcoded secrets using gitleaks
+        entry: gitleaks protect --staged --redact -v
+        language: golang
+        pass_filenames: false
+
+  # ─── General Code Quality ─────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-merge-conflict
+        name: Check for merge conflict markers
+      - id: check-yaml
+        name: Validate YAML files
+        args: ['--unsafe']
+      - id: check-json
+        name: Validate JSON files
+      - id: check-toml
+        name: Validate TOML files
+      - id: end-of-file-fixer
+        name: Fix end of files
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+      - id: check-added-large-files
+        name: Check for large files
+        args: ['--maxkb=1000']
+      - id: check-case-conflict
+        name: Check for case conflicts
+      - id: mixed-line-ending
+        name: Normalize line endings
+        args: ['--fix=lf']
+      - id: detect-private-key
+        name: Detect private keys
+
+  # ─── Shell Script Linting ─────────────────────────────────────────────────
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        name: ShellCheck
+        description: Shell script static analysis
+        args: ['--severity=error']
+
+  # ─── Markdown Linting ─────────────────────────────────────────────────────
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.41.0
+    hooks:
+      - id: markdownlint
+        name: Markdown linting
+        args: ['--fix', '--disable', 'MD013', 'MD033', 'MD041']
+
+  # ─── Commit Message Format ────────────────────────────────────────────────
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.29.1
+    hooks:
+      - id: commitizen
+        name: Validate commit message format
+        stages: [commit-msg]
+
+# ─── Global Configuration ─────────────────────────────────────────────────────
+default_stages: [pre-commit]
+fail_fast: false
+minimum_pre_commit_version: '3.0.0'

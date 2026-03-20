@@ -1,0 +1,180 @@
+{
+  "schema_version": "1.0.0",
+  "last_updated": "2026-03-20",
+  "categories": [
+    {
+      "id": "secret-scanning",
+      "name": "Secret Scanning",
+      "description": "Tools for detecting hardcoded secrets, credentials, and sensitive data in source code and git history",
+      "icon": "🔍",
+      "color": "#FF6B6B",
+      "tools": ["gitleaks", "trufflehog"],
+      "use_cases": [
+        "Pre-commit hooks to prevent secret leakage",
+        "CI/CD pipeline security gates",
+        "Historical git repository auditing",
+        "Compliance scanning (SOC2, PCI-DSS)"
+      ],
+      "recommended_workflow": "Run gitleaks as pre-commit hook + trufflehog in CI pipeline for comprehensive coverage",
+      "subcategories": [
+        {
+          "id": "git-secrets",
+          "name": "Git Repository Secrets",
+          "tools": ["gitleaks"]
+        },
+        {
+          "id": "credential-hunting",
+          "name": "Credential Hunting",
+          "tools": ["trufflehog"]
+        }
+      ]
+    },
+    {
+      "id": "network-security",
+      "name": "Network Security",
+      "description": "Tools for network assessment, wireless security testing, and traffic analysis",
+      "icon": "📡",
+      "color": "#4ECDC4",
+      "tools": ["aircrack-ng"],
+      "use_cases": [
+        "WiFi network security assessment",
+        "WPA/WPA2 password auditing",
+        "Network packet capture and analysis",
+        "Wireless protocol testing"
+      ],
+      "recommended_workflow": "Use aircrack-ng suite for complete wireless security assessment workflow",
+      "subcategories": [
+        {
+          "id": "wireless-security",
+          "name": "Wireless Security",
+          "tools": ["aircrack-ng"]
+        }
+      ]
+    },
+    {
+      "id": "web-application-testing",
+      "name": "Web Application Testing",
+      "description": "Tools for testing web application security including injection attacks, browser exploitation, and automated scanning",
+      "icon": "🌐",
+      "color": "#45B7D1",
+      "tools": ["beef", "commix", "w3af"],
+      "use_cases": [
+        "Web application penetration testing",
+        "Browser-based attack simulation",
+        "Command injection detection",
+        "Comprehensive web vulnerability scanning"
+      ],
+      "recommended_workflow": "Use w3af for initial scan, commix for command injection testing, BeEF for client-side attack simulation",
+      "subcategories": [
+        {
+          "id": "browser-exploitation",
+          "name": "Browser Exploitation",
+          "tools": ["beef"]
+        },
+        {
+          "id": "command-injection",
+          "name": "Command Injection",
+          "tools": ["commix"]
+        },
+        {
+          "id": "vulnerability-scanner",
+          "name": "Vulnerability Scanner",
+          "tools": ["w3af"]
+        }
+      ]
+    },
+    {
+      "id": "threat-intelligence",
+      "name": "Threat Intelligence",
+      "description": "Resources and tools for gathering, analyzing, and operationalizing cyber threat intelligence",
+      "icon": "🕵️",
+      "color": "#96CEB4",
+      "tools": ["deepdarkCTI"],
+      "use_cases": [
+        "Dark web monitoring and intelligence gathering",
+        "Threat actor tracking",
+        "IOC collection and management",
+        "Threat feed integration"
+      ],
+      "recommended_workflow": "Integrate deepdarkCTI feeds with SIEM/MISP for automated threat correlation",
+      "subcategories": [
+        {
+          "id": "dark-web-intelligence",
+          "name": "Dark Web Intelligence",
+          "tools": ["deepdarkCTI"]
+        }
+      ]
+    },
+    {
+      "id": "firmware-analysis",
+      "name": "Firmware Analysis",
+      "description": "Tools for analyzing, extracting, and reverse engineering firmware and binary blobs",
+      "icon": "💾",
+      "color": "#FFEAA7",
+      "tools": ["unblob"],
+      "use_cases": [
+        "IoT device firmware security analysis",
+        "Embedded system vulnerability research",
+        "Binary extraction and unpacking",
+        "Supply chain security analysis"
+      ],
+      "recommended_workflow": "Use unblob for initial firmware extraction, then analyze individual components",
+      "subcategories": [
+        {
+          "id": "binary-extraction",
+          "name": "Binary Extraction",
+          "tools": ["unblob"]
+        }
+      ]
+    },
+    {
+      "id": "development-frameworks",
+      "name": "Development Frameworks",
+      "description": "Frameworks and SDKs for building security tools, AI agents, and deploying applications",
+      "icon": "🛠️",
+      "color": "#DDA0DD",
+      "tools": ["adk-python", "firebase-framework-tools"],
+      "use_cases": [
+        "Building AI-powered security agents",
+        "Deploying web applications with security best practices",
+        "Automating security workflows",
+        "Framework for tool development"
+      ],
+      "recommended_workflow": "Use adk-python for AI agent development, firebase-framework-tools for web deployment",
+      "subcategories": [
+        {
+          "id": "ai-agent-development",
+          "name": "AI Agent Development",
+          "tools": ["adk-python"]
+        },
+        {
+          "id": "web-deployment",
+          "name": "Web Deployment",
+          "tools": ["firebase-framework-tools"]
+        }
+      ]
+    },
+    {
+      "id": "knowledge-bases",
+      "name": "Knowledge Bases",
+      "description": "Comprehensive reference collections, cheatsheets, and documentation resources",
+      "icon": "📚",
+      "color": "#F0E68C",
+      "tools": ["the-book-of-secret-knowledge"],
+      "use_cases": [
+        "Security reference and cheatsheets",
+        "CLI tool discovery",
+        "Sysadmin and DevOps references",
+        "Learning and training resources"
+      ],
+      "recommended_workflow": "Use as reference during security assessments and tool selection",
+      "subcategories": [
+        {
+          "id": "security-reference",
+          "name": "Security Reference",
+          "tools": ["the-book-of-secret-knowledge"]
+        }
+      ]
+    }
+  ]
+}
