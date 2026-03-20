@@ -565,6 +565,163 @@ button {
 .lang-amber  { color: var(--amber); border-color: rgba(245, 158, 11, 0.35); }
 .lang-muted  { color: var(--muted); }
 
+/* ─── Ghost Alerts ─────────────────────────────────────────────────────── */
+
+.alerts-feed {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.ghost-alert-card {
+  border-radius: 12px;
+  border-left: 4px solid transparent;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--panel-soft);
+  padding: 0.85rem 1rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.alert-sev-high   { border-left-color: var(--danger); }
+.alert-sev-medium { border-left-color: var(--amber); }
+.alert-sev-low    { border-left-color: var(--success); }
+
+.alert-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.alert-id-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.alert-id {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.alert-sev-pill, .alert-status-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.sev-high   { background: rgba(239,68,68,0.18); color: #fca5a5; }
+.sev-medium { background: rgba(245,158,11,0.18); color: #fcd34d; }
+.sev-low    { background: rgba(16,185,129,0.18); color: #6ee7b7; }
+
+.status-open         { background: rgba(239,68,68,0.14); color: #fca5a5; }
+.status-investigating { background: rgba(245,158,11,0.14); color: #fcd34d; }
+.status-resolved     { background: rgba(16,185,129,0.14); color: #6ee7b7; }
+.status-pending      { background: rgba(99,102,241,0.14); color: #a5b4fc; }
+
+.alert-time { font-size: 0.75rem; }
+
+.alert-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0;
+  color: #e5e7eb;
+}
+
+.alert-detail {
+  font-size: 0.82rem;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* alert count badge on service cards */
+.alert-badge {
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  margin-left: 0.2rem;
+}
+
+.connected-tools-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+
+.health-endpoint {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.7rem;
+  display: block;
+  margin-top: 0.3rem;
+}
+
+/* ─── Tag Chips ────────────────────────────────────────────────────────── */
+
+.tag-chip {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(103, 232, 249, 0.2);
+  background: rgba(103, 232, 249, 0.06);
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tag-chip:hover,
+.tag-chip.tag-active {
+  background: rgba(103, 232, 249, 0.18);
+  color: var(--cyan);
+  border-color: rgba(103, 232, 249, 0.45);
+}
+
+.tag-chip.tag-service {
+  border-color: rgba(187, 134, 252, 0.3);
+  background: rgba(187, 134, 252, 0.08);
+  color: var(--violet);
+  cursor: default;
+}
+
+.tag-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.2rem;
+}
+
+.tool-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+/* ─── Integrations Badge ───────────────────────────────────────────────── */
+
+.integrations-count {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.15);
+  color: #93c5fd;
+  border: 1px solid rgba(37, 99, 235, 0.3);
+  cursor: help;
+}
+
 .category-filter {
   display: flex;
   flex-wrap: wrap;
@@ -608,8 +765,14 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .log-entry {
+  .log-entry,
+  .alert-header-row {
     grid-template-columns: 1fr;
+  }
+
+  .alert-header-row {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .topbar,

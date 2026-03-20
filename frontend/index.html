@@ -188,6 +188,14 @@
             <div id="ghost-services" class="headline-grid"></div>
           </section>
 
+          <section class="card span-3">
+            <div class="section-header">
+              <h2>Active Alerts</h2>
+              <span id="ghost-alerts-count" class="pill subtle"></span>
+            </div>
+            <div id="ghost-alerts" class="alerts-feed"></div>
+          </section>
+
           <section class="card span-2">
             <div class="section-header">
               <h2>Orchestration Controls</h2>
@@ -224,8 +232,8 @@
                 <h2>Security Tools Integration</h2>
               </div>
               <div class="header-pills">
-                <span class="pill">11 Tools</span>
-                <span class="pill">7 Categories</span>
+                <span id="tool-count-pill" class="pill">19 Tools</span>
+                <span class="pill">10 Categories</span>
                 <span class="pill">Branch: claude/tooling-filing-system-uG7Gs</span>
               </div>
             </div>
@@ -238,6 +246,14 @@
               <span class="pill subtle">Select to narrow view</span>
             </div>
             <div id="tools-filter" class="category-filter"></div>
+          </section>
+
+          <section class="card span-3">
+            <div class="section-header">
+              <h2>Filter by Tag</h2>
+              <button id="tools-tags-clear" type="button" style="width:auto;display:none">✕ Clear tags</button>
+            </div>
+            <div id="tools-tags-filter" class="tag-filter"></div>
           </section>
 
           <section class="card span-3">
