@@ -45,3 +45,14 @@ class Checklist(BaseModel):
     immediate_24h: List[str]
     architecture_1_2_weeks: List[str]
     advanced_1_month: List[str]
+
+
+class ErrorCorrectionRequest(BaseModel):
+    raw_input: str = Field(min_length=1, description="Error code (e.g. 'GW-007') or partial error message.")
+
+
+class DeploymentProbe(BaseModel):
+    service: str
+    status: str = Field(pattern="^(healthy|degraded|down)$")
+    version: str | None = None
+    details: dict = Field(default_factory=dict)

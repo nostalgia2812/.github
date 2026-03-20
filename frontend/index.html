@@ -9,13 +9,24 @@
   <body>
     <header class="topbar">
       <div>
-        <h1>AI Skill Defense Dashboard</h1>
-        <p>Deploy-ready dashboard with direct risk visualization for skill screening workflows.</p>
+        <h1>AI Skill Defense &amp; GhostWallet Dashboard</h1>
+        <p>Risk visualization · GhostWallet error correction · Deployment health</p>
       </div>
-      <span class="pill">OpenClaw Model</span>
+      <div class="topbar-badges">
+        <span class="pill">OpenClaw Model</span>
+        <span class="pill pill-gw">GhostWallet v2.3</span>
+      </div>
     </header>
 
-    <main class="layout">
+    <!-- Tab navigation -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="analysis">Skill Analysis</button>
+      <button class="tab-btn" data-tab="ghostwallet">GhostWallet Errors</button>
+      <button class="tab-btn" data-tab="deployment">Deployment</button>
+    </nav>
+
+    <!-- TAB 1: Skill Analysis -->
+    <main class="layout tab-content active" id="tab-analysis">
       <section class="card span-2">
         <h2>Skill Analysis</h2>
         <form id="scan-form">
@@ -49,6 +60,79 @@
       <section class="card">
         <h2>Threat Intelligence</h2>
         <ul id="ioc-list" class="stack"></ul>
+      </section>
+    </main>
+
+    <!-- TAB 2: GhostWallet Error Correction -->
+    <main class="layout tab-content" id="tab-ghostwallet">
+      <section class="card span-2">
+        <h2>Error Code Correction</h2>
+        <form id="gw-correct-form">
+          <label>
+            Error Code or Message
+            <input id="gw-raw-input" placeholder="e.g. GW-007 or 'nonce mismatch'" required />
+          </label>
+          <button type="submit">Correct Error</button>
+        </form>
+        <div id="gw-correction-result" class="correction-result hidden"></div>
+      </section>
+
+      <section class="card">
+        <h2>Correction Stats</h2>
+        <div id="gw-stats" class="gw-stats muted">Load the catalog to see stats.</div>
+      </section>
+
+      <section class="card span-3">
+        <h2>GhostWallet Error Catalog</h2>
+        <div class="gw-search-bar">
+          <input id="gw-catalog-filter" placeholder="Filter by code, title, or category…" />
+        </div>
+        <div id="gw-error-catalog" class="gw-catalog">
+          <p class="muted">Loading error catalog…</p>
+        </div>
+      </section>
+    </main>
+
+    <!-- TAB 3: Deployment Dashboard -->
+    <main class="layout tab-content" id="tab-deployment">
+      <section class="card span-3">
+        <div class="deploy-banner-inner">
+          <div>
+            <h2 style="margin:0">Deployment Status</h2>
+            <p class="muted" id="deploy-generated-at">Loading…</p>
+          </div>
+          <span id="deploy-overall-badge" class="status-badge">–</span>
+        </div>
+      </section>
+
+      <section class="card span-3">
+        <h2>Services</h2>
+        <div id="service-grid" class="service-grid">
+          <p class="muted">Loading service health…</p>
+        </div>
+      </section>
+
+      <section class="card span-2">
+        <h2>GhostWallet Error Categories</h2>
+        <div id="error-category-bars" class="bars muted">Loading…</div>
+      </section>
+
+      <section class="card">
+        <h2>Submit Probe</h2>
+        <form id="probe-form">
+          <label>Service Name <input id="probe-service" required placeholder="my-service" /></label>
+          <label>
+            Status
+            <select id="probe-status">
+              <option value="healthy">healthy</option>
+              <option value="degraded">degraded</option>
+              <option value="down">down</option>
+            </select>
+          </label>
+          <label>Version <input id="probe-version" placeholder="1.0.0" /></label>
+          <button type="submit">Submit Probe</button>
+        </form>
+        <p id="probe-result" class="muted" style="margin-top:.5rem"></p>
       </section>
     </main>
 

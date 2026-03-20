@@ -14,6 +14,8 @@ body {
   background: radial-gradient(circle at top, #1f2937, #0b1220 60%);
 }
 
+/* ── Topbar ─────────────────────────────────────────────────────────────────── */
+
 .topbar {
   max-width: 1200px;
   margin: 0 auto;
@@ -34,6 +36,13 @@ body {
   color: #94a3b8;
 }
 
+.topbar-badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .pill {
   border: 1px solid #4b5563;
   border-radius: 999px;
@@ -41,6 +50,55 @@ body {
   color: #cbd5e1;
   font-size: 0.8rem;
 }
+
+.pill-gw {
+  border-color: #3b82f6;
+  color: #93c5fd;
+}
+
+/* ── Tab navigation ─────────────────────────────────────────────────────────── */
+
+.tab-nav {
+  max-width: 1200px;
+  margin: 0.5rem auto 0;
+  padding: 0 2rem;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.tab-btn {
+  width: auto;
+  background: transparent;
+  border: 1px solid #334155;
+  border-radius: 8px 8px 0 0;
+  padding: 0.5rem 1.1rem;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.88rem;
+  transition: background 0.15s, color 0.15s;
+  margin-top: 0;
+}
+
+.tab-btn:hover {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+.tab-btn.active {
+  background: rgba(15, 23, 42, 0.92);
+  border-bottom-color: rgba(15, 23, 42, 0.92);
+  color: #e2e8f0;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: grid;
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────────────── */
 
 .layout {
   max-width: 1200px;
@@ -56,7 +114,8 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .span-2 {
+  .span-2,
+  .span-3 {
     grid-column: auto;
   }
 }
@@ -72,6 +131,10 @@ body {
   grid-column: span 2;
 }
 
+.span-3 {
+  grid-column: span 3;
+}
+
 h2 {
   margin-top: 0;
   font-size: 1.05rem;
@@ -85,6 +148,7 @@ label {
 
 input,
 textarea,
+select,
 button {
   width: 100%;
   margin-top: 0.35rem;
@@ -95,11 +159,21 @@ button {
   color: #e2e8f0;
 }
 
+select {
+  cursor: pointer;
+}
+
 button {
   background: #2563eb;
   border: none;
   cursor: pointer;
 }
+
+button:hover {
+  background: #1d4ed8;
+}
+
+/* ── Risk meter ─────────────────────────────────────────────────────────────── */
 
 .meter {
   width: 100%;
@@ -114,6 +188,7 @@ button {
   width: 0;
   height: 100%;
   background: linear-gradient(90deg, #10b981, #f59e0b, #ef4444);
+  transition: width 0.4s ease;
 }
 
 .risk-pill {
@@ -126,9 +201,11 @@ button {
 }
 
 .risk-critical { background: #7f1d1d; }
-.risk-high { background: #9a3412; }
-.risk-medium { background: #854d0e; }
-.risk-low { background: #166534; }
+.risk-high     { background: #9a3412; }
+.risk-medium   { background: #854d0e; }
+.risk-low      { background: #166534; }
+
+/* ── Shared helpers ─────────────────────────────────────────────────────────── */
 
 .stack {
   padding-left: 1rem;
@@ -145,6 +222,8 @@ button {
   display: grid;
   gap: 0.7rem;
 }
+
+.bar-row { }
 
 .bar-header {
   display: flex;
@@ -163,6 +242,7 @@ button {
   height: 100%;
   border-radius: 999px;
   background: #38bdf8;
+  transition: width 0.4s ease;
 }
 
 .muted {
@@ -171,4 +251,229 @@ button {
 
 .hidden {
   display: none;
+}
+
+/* ── GhostWallet Error Catalog ──────────────────────────────────────────────── */
+
+.gw-search-bar {
+  margin-bottom: 0.75rem;
+}
+
+.gw-search-bar input {
+  margin-top: 0;
+}
+
+.gw-catalog {
+  display: grid;
+  gap: 0.75rem;
+  max-height: 68vh;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.gw-card {
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 0.85rem;
+  background: #0f172a;
+}
+
+.gw-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+.gw-code {
+  font-family: monospace;
+  font-size: 0.85rem;
+  background: #1e293b;
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+  color: #38bdf8;
+}
+
+.gw-title {
+  font-weight: 600;
+  flex: 1;
+}
+
+.gw-badge {
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.72rem;
+  text-transform: capitalize;
+}
+
+.gw-auto-badge {
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.72rem;
+  background: #1d4ed8;
+  color: #bfdbfe;
+}
+
+.gw-desc {
+  font-size: 0.88rem;
+  color: #cbd5e1;
+  margin: 0.3rem 0;
+}
+
+.gw-steps {
+  margin: 0.4rem 0 0 1.2rem;
+  padding: 0;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.gw-steps li {
+  margin-bottom: 0.25rem;
+}
+
+.gw-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.gw-docs-link {
+  color: #38bdf8;
+  text-decoration: none;
+  font-size: 0.78rem;
+}
+
+.gw-docs-link:hover {
+  text-decoration: underline;
+}
+
+details summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: #64748b;
+  margin-top: 0.3rem;
+}
+
+/* ── GhostWallet Stats ──────────────────────────────────────────────────────── */
+
+.gw-stats {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.88rem;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 0.35rem;
+}
+
+/* ── Correction result ──────────────────────────────────────────────────────── */
+
+.correction-result {
+  margin-top: 1rem;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 0.85rem;
+  background: #0f172a;
+}
+
+.cr-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.cr-log {
+  background: #020617;
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin: 0.5rem 0;
+}
+
+.cr-log-line {
+  margin-bottom: 0.2rem;
+  line-height: 1.5;
+}
+
+/* ── Deployment Dashboard ───────────────────────────────────────────────────── */
+
+.deploy-banner-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.status-badge {
+  border-radius: 999px;
+  padding: 0.4rem 1rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  background: #166534;
+}
+
+.service-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.service-card {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 0.85rem;
+}
+
+.service-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.3rem;
+}
+
+.service-version {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-bottom: 0.15rem;
+}
+
+.service-status-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  margin-bottom: 0.4rem;
+}
+
+.service-details {
+  display: grid;
+  gap: 0.15rem;
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.service-checked {
+  font-size: 0.72rem;
+  margin-top: 0.4rem;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
 }

@@ -1,14 +1,29 @@
 from datetime import UTC, datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI
+from fastapi import Body, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .data import CHECKLIST, IOCS
 from .engine import analyze_request
 from .fluid_integration import build_fluid_payload, fluid_status
+from .ghostwallet import (
+    GHOSTWALLET_ERRORS,
+    build_deployment_dashboard,
+    correct_error,
+    CorrectionResult,
+    DeploymentDashboard,
+    GWErrorEntry,
+)
 from .openclaw_threat_model import generate_complete_code_string
-from .schemas import Checklist, Indicator, ScanRequest, ScanResponse
+from .schemas import (
+    Checklist,
+    DeploymentProbe,
+    ErrorCorrectionRequest,
+    Indicator,
+    ScanRequest,
+    ScanResponse,
+)
 from .security import require_api_key
 
 
@@ -61,13 +76,48 @@ API_CATALOG: List[Dict[str, Any]] = [
         "description": "Generate Fluid-ready payload from scan results.",
         "protected": True,
     },
+    # --- GhostWallet ---
+    {
+        "path": "/api/ghostwallet/errors",
+        "method": "GET",
+        "description": "List all GhostWallet error codes with descriptions and correction steps.",
+        "protected": False,
+    },
+    {
+        "path": "/api/ghostwallet/errors/{code}",
+        "method": "GET",
+        "description": "Retrieve a single GhostWallet error entry by code (e.g. GW-007).",
+        "protected": False,
+    },
+    {
+        "path": "/api/ghostwallet/correct",
+        "method": "POST",
+        "description": "Submit a raw error code or message; returns structured correction result.",
+        "protected": False,
+    },
+    # --- Deployment dashboard ---
+    {
+        "path": "/api/deployment/dashboard",
+        "method": "GET",
+        "description": "Snapshot of all service health checks and GhostWallet error category summary.",
+        "protected": False,
+    },
+    {
+        "path": "/api/deployment/dashboard",
+        "method": "POST",
+        "description": "Submit live probe results and receive an updated deployment dashboard.",
+        "protected": False,
+    },
 ]
 
 
 app = FastAPI(
     title="AI Skill Defense API",
-    description="Backend service for analyzing AI agent skills and tracking OpenClaw-style indicators.",
-    version="2.2.0",
+    description=(
+        "Backend service for analyzing AI agent skills, tracking OpenClaw-style indicators, "
+        "and managing GhostWallet error correction with deployment health dashboards."
+    ),
+    version="2.3.0",
 )
 
 app.add_middleware(
@@ -78,6 +128,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ---------------------------------------------------------------------------
+# Core endpoints
+# ---------------------------------------------------------------------------
 
 @app.get("/api")
 def list_api() -> dict:
@@ -117,3 +171,56 @@ def get_fluid_status() -> dict:
 @app.post("/api/integrations/fluid/payload", dependencies=[Depends(require_api_key)])
 def get_fluid_payload(payload: ScanRequest) -> dict:
     return build_fluid_payload(payload)
+
+
+# ---------------------------------------------------------------------------
+# GhostWallet error correction endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/ghostwallet/errors")
+def list_ghostwallet_errors() -> dict:
+    """Return all registered GhostWallet error codes."""
+    return {
+        "total": len(GHOSTWALLET_ERRORS),
+        "errors": list(GHOSTWALLET_ERRORS.values()),
+    }
+
+
+@app.get("/api/ghostwallet/errors/{code}")
+def get_ghostwallet_error(code: str) -> GWErrorEntry:
+    """Return a single GhostWallet error entry by code (case-insensitive)."""
+    from fastapi import HTTPException, status as http_status
+
+    normalised = code.upper()
+    entry = GHOSTWALLET_ERRORS.get(normalised)
+    if entry is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"No GhostWallet error registered for code '{normalised}'.",
+        )
+    return entry
+
+
+@app.post("/api/ghostwallet/correct")
+def ghostwallet_correct(payload: ErrorCorrectionRequest) -> CorrectionResult:
+    """Accept a raw error string and return a structured correction result."""
+    return correct_error(payload.raw_input)
+
+
+# ---------------------------------------------------------------------------
+# Deployment dashboard endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/deployment/dashboard")
+def get_deployment_dashboard() -> DeploymentDashboard:
+    """Return a live-generated deployment health snapshot with default probes."""
+    return build_deployment_dashboard()
+
+
+@app.post("/api/deployment/dashboard")
+def post_deployment_dashboard(probes: Optional[List[DeploymentProbe]] = Body(default=None)) -> DeploymentDashboard:
+    """Accept caller-supplied probe results and generate a deployment dashboard."""
+    raw = None
+    if probes:
+        raw = [p.model_dump() for p in probes]
+    return build_deployment_dashboard(raw)

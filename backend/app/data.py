@@ -40,6 +40,10 @@ IOCS: List[Indicator] = [
     Indicator(type="publisher", value="hightower6eu", source="VirusTotal OpenClaw research", severity=Severity.critical),
     Indicator(type="password", value="openclaw", source="VirusTotal OpenClaw research", severity=Severity.high),
     Indicator(type="distribution", value="glot.io", source="Observed in malicious skill payload hosting", severity=Severity.medium),
+    # GhostWallet-specific IOCs
+    Indicator(type="ghostwallet-error", value="GW-010", source="GhostWallet authentication failure pattern", severity=Severity.critical),
+    Indicator(type="ghostwallet-error", value="GW-001", source="GhostWallet invalid signature pattern", severity=Severity.critical),
+    Indicator(type="ghostwallet-rpc", value="GW-004", source="GhostWallet RPC unreachable pattern", severity=Severity.high),
 ]
 
 CHECKLIST = Checklist(
