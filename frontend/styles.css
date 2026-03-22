@@ -88,17 +88,11 @@ textarea,
 button {
   width: 100%;
   margin-top: 0.35rem;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid #475569;
-  padding: 0.6rem;
+  padding: 0.7rem;
   background: #0f172a;
   color: #e2e8f0;
-}
-
-button {
-  background: #2563eb;
-  border: none;
-  cursor: pointer;
 }
 
 .meter {

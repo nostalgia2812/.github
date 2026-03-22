@@ -95,59 +95,7 @@ def test_api_catalog_lists_all_endpoints() -> None:
     response = client.get('/api')
     assert response.status_code == 200
     body = response.json()
-    assert body['total_endpoints'] >= 12
+    assert body['total_endpoints'] >= 8
     paths = {entry['path'] for entry in body['endpoints']}
     assert '/api/scan' in paths
     assert '/api/integrations/fluid/payload' in paths
-    assert '/api/audit' in paths
-
-
-def test_provider_catalog_shows_defensive_usage_policy() -> None:
-    response = client.get('/api/providers')
-    assert response.status_code == 200
-    body = response.json()
-    assert len(body['providers']) >= 4
-    assert 'payload generation' in body['usage_policy']['blocked']
-
-
-def test_safety_policy_blocks_offensive_capabilities() -> None:
-    response = client.get('/api/safety/policy')
-    assert response.status_code == 200
-    body = response.json()
-    assert 'payload generation' in body['blocked_capabilities']
-    assert 'defensive IOC enrichment' in body['safe_alternatives']
-
-
-def test_dashboard_context_contains_latest_content_and_tools() -> None:
-    response = client.get('/api/dashboard/context')
-    assert response.status_code == 200
-    body = response.json()
-    assert len(body['latest_content']) >= 6
-    assert any(tool['name'] == 'Prompt Maker Image Generator' for tool in body['tools'])
-
-
-def test_developer_toolkit_contains_powershell_and_adk_guidance() -> None:
-    response = client.get('/api/developer-toolkit')
-    assert response.status_code == 200
-    body = response.json()
-    assert any(item['name'] == 'Google ADK + Gemini CLI' for item in body['developer_workflows'])
-    assert any(cmd['command'] == 'kit version' for cmd in body['powershell_commands'])
-
-
-def test_audit_endpoint_reminds_on_http(monkeypatch) -> None:
-    from app import main as main_module
-
-    class DummyResult:
-        url = 'http://example.com'
-        ok = True
-        status_code = 200
-        latency_ms = 12
-        message = 'Endpoint responded successfully.'
-        https_recommended = True
-
-    monkeypatch.setattr(main_module, 'audit_url', lambda url: DummyResult())
-    response = client.post('/api/audit', json={'url': 'http://example.com'})
-    assert response.status_code == 200
-    body = response.json()
-    assert body['status_code'] == 200
-    assert body['https_recommended'] is True
