@@ -32,7 +32,7 @@ def build_fluid_payload(payload: ScanRequest) -> Dict[str, Any]:
         "configured": status["configured"],
         "target": f"{status['base_url'].rstrip('/')}/threat-analysis",
         "headers": {
-            "Authorization": f"Bearer {status['api_key_masked'] or '<missing>'}",
+            "Authorization": f"Bearer {os.getenv(FLUID_API_KEY_ENV) or '<missing>'}",
             "Content-Type": "application/json",
         },
         "payload": {
