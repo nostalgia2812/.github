@@ -99,3 +99,27 @@ def test_api_catalog_lists_all_endpoints() -> None:
     paths = {entry['path'] for entry in body['endpoints']}
     assert '/api/scan' in paths
     assert '/api/integrations/fluid/payload' in paths
+
+
+def test_get_iocs() -> None:
+    response = client.get('/api/iocs')
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body, list)
+    assert len(body) > 0
+    first = body[0]
+    assert 'type' in first
+    assert 'value' in first
+    assert 'source' in first
+    assert 'severity' in first
+
+
+def test_get_checklist() -> None:
+    response = client.get('/api/checklist')
+    assert response.status_code == 200
+    body = response.json()
+    assert 'immediate_24h' in body
+    assert 'architecture_1_2_weeks' in body
+    assert 'advanced_1_month' in body
+    assert isinstance(body['immediate_24h'], list)
+    assert len(body['immediate_24h']) > 0
