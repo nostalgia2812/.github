@@ -1,0 +1,41 @@
+{
+  "ghost_ai": {
+    "version": "1.0.0",
+    "description": "Ghost AI Security Intelligence Platform",
+    "features": {
+      "secret_scanning": true,
+      "threat_intelligence": true,
+      "github_api_integration": true,
+      "adk_agent": true,
+      "wallet_integration": false
+    },
+    "security_tools": [
+      {"name": "Gitleaks",   "repo": "nostalgia2812/gitleaks",   "category": "secret_scanning"},
+      {"name": "TruffleHog", "repo": "nostalgia2812/trufflehog", "category": "secret_scanning"},
+      {"name": "Aircrack-ng","repo": "nostalgia2812/aircrack-ng","category": "wireless"},
+      {"name": "BeEF",       "repo": "nostalgia2812/beef",       "category": "browser_exploitation"},
+      {"name": "Commix",     "repo": "nostalgia2812/commix",     "category": "injection"},
+      {"name": "W3AF",       "repo": "nostalgia2812/w3af",       "category": "web_application"},
+      {"name": "Unblob",     "repo": "nostalgia2812/unblob",     "category": "firmware_analysis"}
+    ],
+    "github_api": {
+      "base_url": "https://api.github.com",
+      "api_version": "2022-11-28",
+      "token_env_var": "GITHUB_TOKEN",
+      "scopes_required": ["repo", "read:org", "security_events"]
+    },
+    "scanner": {
+      "max_file_size_bytes": 500000,
+      "max_files_per_repo": 200,
+      "max_repos_per_scan": 20,
+      "scannable_extensions": [
+        ".py", ".js", ".ts", ".jsx", ".tsx",
+        ".env", ".yaml", ".yml", ".json",
+        ".toml", ".cfg", ".ini", ".sh",
+        ".rb", ".go", ".java", ".kt",
+        ".swift", ".rs", ".php",
+        ".tf", ".tfvars", ".properties"
+      ]
+    }
+  }
+}

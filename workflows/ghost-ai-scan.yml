@@ -1,0 +1,88 @@
+name: Ghost AI Security Scan
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    # Daily scan at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: 'Repo to scan (owner/repo). Leave blank to scan this repo.'
+        required: false
+        default: ''
+
+jobs:
+  ghost-ai-scan:
+    name: Ghost AI Secret Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Ghost AI
+        run: |
+          pip install httpx google-adk 2>/dev/null || pip install httpx
+          # Install gitleaks for cross-validation
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_amd64.tar.gz \
+            | tar -xz -C /usr/local/bin gitleaks
+
+      - name: Run Gitleaks
+        run: |
+          gitleaks detect \
+            --source . \
+            --report-format sarif \
+            --report-path gitleaks-results.sarif \
+            --exit-code 0
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Run Ghost AI Scanner
+        run: |
+          python -c "
+import asyncio, os, sys
+sys.path.insert(0, '.')
+token = os.environ.get('GITHUB_TOKEN', '')
+if not token:
+    print('No GITHUB_TOKEN — skipping Ghost AI deep scan')
+    sys.exit(0)
+from ghost_ai.master import GitHubClient, scan_repository, generate_report
+async def run():
+    client = GitHubClient(token)
+    owner, repo = os.environ.get('GITHUB_REPOSITORY', 'nostalgia2812/adk-python').split('/')
+    result = await scan_repository(client, owner, repo)
+    report_path = generate_report([result], 'ghost-ai-results.json')
+    print(f'Ghost AI: {len(result.findings)} findings → {report_path}')
+asyncio.run(run())
+"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gitleaks-results.sarif
+        if: always()
+
+      - name: Upload Ghost AI Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghost-ai-security-report
+          path: ghost-ai-results.json
+          retention-days: 30
+        if: always()
