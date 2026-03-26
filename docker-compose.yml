@@ -1,13 +1,71 @@
 version: '3.9'
+
+# ============================================================
+#  Production compose.  Copy .env.example → .env and fill in
+#  values before running:  make up
+# ============================================================
+
+x-restart: &restart
+  restart: unless-stopped
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
 services:
+
   backend:
-    build: ./backend
+    <<: [*restart, *logging]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    image: ai-skill-defense/backend:latest
+    env_file: .env
+    environment:
+      - PORT=8000
     ports:
-      - '8000:8000'
+      - "127.0.0.1:8000:8000"   # bind to localhost only; expose via nginx/caddy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
 
   frontend:
-    build: ./frontend
+    <<: [*restart, *logging]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ai-skill-defense/frontend:latest
     ports:
-      - '8080:80'
+      - "80:80"
+      - "443:443"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+
+networks:
+  internal:
+    driver: bridge

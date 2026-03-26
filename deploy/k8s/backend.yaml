@@ -2,26 +2,69 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ai-skill-defense-backend
+  labels:
+    app: ai-skill-defense-backend
+    version: "2.2.0"
 spec:
   replicas: 2
   selector:
     matchLabels:
       app: ai-skill-defense-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     metadata:
       labels:
         app: ai-skill-defense-backend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: backend
           image: ai-skill-defense/backend:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: ai-skill-defense-secrets
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: ai-skill-defense-backend
+  labels:
+    app: ai-skill-defense-backend
 spec:
   selector:
     app: ai-skill-defense-backend
@@ -29,3 +72,13 @@ spec:
     - protocol: TCP
       port: 8000
       targetPort: 8000
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ai-skill-defense-backend-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: ai-skill-defense-backend

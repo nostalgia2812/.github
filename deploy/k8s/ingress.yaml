@@ -2,9 +2,25 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: ai-skill-defense
+  annotations:
+    # cert-manager: auto-provision TLS certificate via Let's Encrypt
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # nginx tuning for WebSocket (Twilio Voice) and large uploads
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, X-API-Key"
 spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - your-domain.com          # ← replace with real domain
+      secretName: ai-skill-defense-tls
   rules:
-    - host: defense.local
+    - host: your-domain.com        # ← replace with real domain
       http:
         paths:
           - path: /api

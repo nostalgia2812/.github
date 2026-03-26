@@ -2,26 +2,65 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ai-skill-defense-frontend
+  labels:
+    app: ai-skill-defense-frontend
+    version: "2.2.0"
 spec:
   replicas: 2
   selector:
     matchLabels:
       app: ai-skill-defense-frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     metadata:
       labels:
         app: ai-skill-defense-frontend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101       # nginx user
+        fsGroup: 101
       containers:
         - name: frontend
           image: ai-skill-defense/frontend:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "500m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["NET_BIND_SERVICE"]
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: ai-skill-defense-frontend
+  labels:
+    app: ai-skill-defense-frontend
 spec:
   selector:
     app: ai-skill-defense-frontend
@@ -29,3 +68,13 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 80
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ai-skill-defense-frontend-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: ai-skill-defense-frontend
