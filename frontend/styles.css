@@ -379,6 +379,139 @@ button {
   display: none;
 }
 
+/* ===== Communications Live/Demo Status ===== */
+
+.comms-live-pill {
+  background: rgba(37, 99, 235, 0.2);
+  border-color: #2563eb;
+  color: #60a5fa;
+}
+
+.setup-banner {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(120, 53, 15, 0.18);
+}
+
+.setup-banner-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.missing-vars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: flex-start;
+  padding-top: 0.2rem;
+}
+
+.missing-var {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid #475569;
+  border-radius: 6px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.78rem;
+  color: var(--amber);
+  font-family: monospace;
+}
+
+.setup-steps {
+  margin-top: 0.5rem;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding-top: 0.75rem;
+}
+
+.setup-steps summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--cyan);
+  list-style: none;
+}
+
+.setup-steps summary::before {
+  content: '▶ ';
+  font-size: 0.7rem;
+}
+
+.setup-steps[open] summary::before {
+  content: '▼ ';
+}
+
+.setup-ol {
+  margin: 0.75rem 0 0;
+  padding-left: 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.setup-ol code {
+  background: rgba(15,23,42,0.7);
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.82rem;
+  color: var(--cyan);
+}
+
+/* To: number input */
+.to-row {
+  margin-bottom: 0.4rem;
+}
+
+.to-input {
+  width: 100%;
+  margin: 0;
+  border-radius: 8px;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.85rem;
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+}
+
+/* Send / call status feedback */
+.send-status {
+  font-size: 0.78rem;
+  margin-top: 0.3rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  transition: opacity 0.3s;
+}
+
+.send-status.sending { background: rgba(37,99,235,0.18); color: #93c5fd; }
+.send-status.ok      { background: rgba(16,185,129,0.18); color: var(--success); }
+.send-status.err     { background: rgba(239,68,68,0.18);  color: var(--danger); }
+.send-status.muted-status { color: var(--muted); }
+
+/* Call status bar */
+.call-status-bar {
+  margin-top: 0.5rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.call-state-calling   { background: rgba(245,158,11,0.18); color: var(--amber); }
+.call-state-connected { background: rgba(16,185,129,0.18); color: var(--success); animation: pulse-bg 1.5s infinite; }
+.call-state-ended     { background: rgba(51,65,85,0.6);    color: var(--muted); }
+.call-state-error     { background: rgba(239,68,68,0.18);  color: var(--danger); }
+
+@keyframes pulse-bg {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.7; }
+}
+
 /* ===== Communications Panel ===== */
 
 .comms-kpi-grid {

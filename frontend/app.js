@@ -362,8 +362,77 @@ let commsStats = null;
 let commsMessages = [];
 let activeContact = 0;
 let smsFilter = 'all';
+let commsLiveMode = false;   // true when Twilio SMS vars are set
+let commsVoiceMode = false;  // true when Twilio Voice vars are set
+let twilioDevice = null;     // Twilio.Device instance
+let activeCall = null;       // active Call object
+let callStartTime = null;
+
+async function initTwilioDevice() {
+  if (!window.Twilio || !window.Twilio.Device) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/comms/voice/token`);
+    if (!res.ok) return;
+    const { token } = await res.json();
+    twilioDevice = new Twilio.Device(token, { logLevel: 1 });
+
+    twilioDevice.on('registered', () => {
+      console.info('[Twilio] Device registered — ready for calls');
+    });
+
+    twilioDevice.on('incoming', (call) => {
+      activeCall = call;
+      setCallStatus(`Incoming call from ${call.parameters.From || 'unknown'}`, 'calling');
+      call.accept();
+    });
+
+    twilioDevice.on('error', (err) => {
+      console.warn('[Twilio] Device error', err);
+    });
+
+    await twilioDevice.register();
+  } catch (err) {
+    console.warn('[Twilio] Device init failed:', err.message);
+  }
+}
+
+async function loadCommsConfig() {
+  try {
+    const res = await fetch(`${API_BASE}/api/comms/config`);
+    if (!res.ok) return;
+    const cfg = await res.json();
+    commsLiveMode = cfg.sms_ready;
+    commsVoiceMode = cfg.voice_ready;
+
+    const badge = document.getElementById('comms-mode-badge');
+    if (badge) {
+      badge.textContent = cfg.mode === 'live' ? 'Live Mode' : 'Demo Mode';
+      badge.className = cfg.mode === 'live' ? 'pill comms-live-pill' : 'pill comms-mode-pill';
+    }
+
+    const banner = document.getElementById('comms-setup-banner');
+    if (banner) {
+      if (cfg.missing_vars && cfg.missing_vars.length > 0) {
+        banner.classList.remove('hidden');
+        const list = document.getElementById('missing-vars-list');
+        if (list) {
+          list.innerHTML = cfg.missing_vars.map((v) =>
+            `<code class="missing-var">${v}</code>`
+          ).join('');
+        }
+      } else {
+        banner.classList.add('hidden');
+      }
+    }
+  } catch {
+    // backend unreachable – stay in demo mode
+  }
+}
 
 async function loadCommsData() {
+  await loadCommsConfig();
+  if (commsVoiceMode) await initTwilioDevice();
+
   try {
     const [statsRes, msgsRes] = await Promise.all([
       fetch(`${API_BASE}/api/comms/stats`),
@@ -543,15 +612,50 @@ function escHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-// SMS compose
-document.getElementById('sms-compose').addEventListener('submit', (e) => {
+// SMS compose — real send when live, demo fallback otherwise
+document.getElementById('sms-compose').addEventListener('submit', async (e) => {
   e.preventDefault();
   const input = document.getElementById('sms-input');
+  const toInput = document.getElementById('sms-to');
+  const statusEl = document.getElementById('sms-send-status');
   const text = input.value.trim();
   if (!text) return;
-  commsMessages.push({ id: Date.now(), channel: 'sms', direction: 'outbound', from: 'Me', text, ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+
+  const to = toInput ? toInput.value.trim() : '';
+
+  if (commsLiveMode && to) {
+    // Real SMS via Twilio
+    statusEl.textContent = 'Sending…';
+    statusEl.className = 'send-status sending';
+    try {
+      const res = await fetch(`${API_BASE}/api/comms/sms/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, body: text }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Send failed');
+      statusEl.textContent = `Sent · SID ${data.sid}`;
+      statusEl.className = 'send-status ok';
+      commsMessages.push({ id: Date.now(), channel: 'sms', direction: 'outbound', from: 'Me', text, ts: data.ts || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+    } catch (err) {
+      statusEl.textContent = `Error: ${err.message}`;
+      statusEl.className = 'send-status err';
+    }
+  } else {
+    // Demo mode
+    if (commsLiveMode && !to) {
+      statusEl.textContent = 'Enter a "To:" number to send a real SMS.';
+      statusEl.className = 'send-status err';
+    }
+    commsMessages.push({ id: Date.now(), channel: 'sms', direction: 'outbound', from: 'Me', text, ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+    statusEl.textContent = 'Demo mode — message added locally.';
+    statusEl.className = 'send-status muted-status';
+  }
+
   input.value = '';
   renderSmsThread();
+  setTimeout(() => { statusEl.className += ' hidden'; }, 4000);
   if (commsStats) { commsStats.total_messages++; commsStats.messages_today++; commsStats.sms_sent++; renderKPIs(); }
 });
 
@@ -598,17 +702,67 @@ document.getElementById('dp-clear').addEventListener('click', () => {
   display.value = display.value.slice(0, -1);
 });
 
-document.getElementById('dp-call').addEventListener('click', () => {
+document.getElementById('dp-call').addEventListener('click', async () => {
   const number = document.getElementById('dp-number').value.trim();
+  const statusBar = document.getElementById('call-status-bar');
   if (!number) return;
-  CALL_LOG.unshift({ number, duration: '—', status: 'active', time: 'now' });
-  renderCallLog();
-  setTimeout(() => {
-    const item = CALL_LOG.find((c) => c.number === number && c.status === 'active');
-    if (item) { item.status = 'completed'; item.duration = '0m 42s'; renderCallLog(); }
-    if (commsStats) { commsStats.calls_completed++; renderKPIs(); }
-  }, 4000);
+
+  if (twilioDevice && commsVoiceMode) {
+    // Real call via Twilio.Device
+    try {
+      setCallStatus('Connecting…', 'calling');
+      activeCall = await twilioDevice.connect({ params: { To: number } });
+
+      activeCall.on('accept', () => {
+        callStartTime = Date.now();
+        setCallStatus(`Connected · ${number}`, 'connected');
+        CALL_LOG.unshift({ number, duration: '…', status: 'active', time: 'now' });
+        renderCallLog();
+      });
+
+      activeCall.on('disconnect', () => {
+        const secs = callStartTime ? Math.round((Date.now() - callStartTime) / 1000) : 0;
+        const dur = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`;
+        setCallStatus(`Call ended · ${dur}`, 'ended');
+        const item = CALL_LOG.find((c) => c.number === number && c.status === 'active');
+        if (item) { item.status = 'completed'; item.duration = dur; }
+        if (commsStats) { commsStats.calls_completed++; renderKPIs(); }
+        renderCallLog();
+        activeCall = null;
+        callStartTime = null;
+        setTimeout(() => { statusBar.className = 'call-status-bar hidden'; }, 3000);
+      });
+
+      activeCall.on('error', (err) => {
+        setCallStatus(`Call error: ${err.message}`, 'error');
+        activeCall = null;
+      });
+
+      document.getElementById('dp-call').textContent = 'Hang Up';
+      document.getElementById('dp-call').onclick = () => { if (activeCall) activeCall.disconnect(); };
+    } catch (err) {
+      setCallStatus(`Failed: ${err.message}`, 'error');
+    }
+  } else {
+    // Demo simulation
+    CALL_LOG.unshift({ number, duration: '—', status: 'active', time: 'now' });
+    setCallStatus(`[Demo] Simulating call to ${number}`, 'calling');
+    renderCallLog();
+    setTimeout(() => {
+      const item = CALL_LOG.find((c) => c.number === number && c.status === 'active');
+      if (item) { item.status = 'completed'; item.duration = '0m 42s'; renderCallLog(); }
+      if (commsStats) { commsStats.calls_completed++; renderKPIs(); }
+      setCallStatus('Demo call ended · 0m 42s', 'ended');
+      setTimeout(() => { statusBar.className = 'call-status-bar hidden'; }, 3000);
+    }, 4000);
+  }
 });
+
+function setCallStatus(msg, state) {
+  const bar = document.getElementById('call-status-bar');
+  bar.textContent = msg;
+  bar.className = `call-status-bar call-state-${state}`;
+}
 
 // commsLoaded flag used by tab click handlers above
 let commsLoaded = false;

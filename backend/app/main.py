@@ -1,15 +1,29 @@
 from datetime import UTC, datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Form, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
+from .comms_service import (
+    build_dial_twiml,
+    build_incoming_twiml,
+    config_status as comms_config_status,
+    get_voice_token,
+    is_sms_ready,
+    send_sms,
+)
 from .data import CHECKLIST, IOCS
 from .engine import analyze_request
 from .fluid_integration import build_fluid_payload, fluid_status
 from .openclaw_threat_model import generate_complete_code_string
 from .schemas import Checklist, Indicator, ScanRequest, ScanResponse
 from .security import require_api_key
+
+
+class SMSSendRequest(BaseModel):
+    to: str
+    body: str
 
 # --- Communications demo data ---
 _COMMS_MESSAGES: List[Dict[str, Any]] = [
@@ -98,7 +112,43 @@ API_CATALOG: List[Dict[str, Any]] = [
     {
         "path": "/api/comms/messages",
         "method": "GET",
-        "description": "Mock message history, filterable by channel.",
+        "description": "Message history, filterable by channel.",
+        "protected": False,
+    },
+    {
+        "path": "/api/comms/config",
+        "method": "GET",
+        "description": "Twilio integration status (live vs demo mode, missing env vars).",
+        "protected": False,
+    },
+    {
+        "path": "/api/comms/sms/send",
+        "method": "POST",
+        "description": "Send a real SMS via Twilio (requires TWILIO_* env vars).",
+        "protected": False,
+    },
+    {
+        "path": "/api/comms/voice/token",
+        "method": "GET",
+        "description": "Issue a Twilio Access Token for browser-based calling.",
+        "protected": False,
+    },
+    {
+        "path": "/api/comms/voice/twiml",
+        "method": "POST",
+        "description": "TwiML webhook: Twilio calls this to dial outbound PSTN numbers.",
+        "protected": False,
+    },
+    {
+        "path": "/api/comms/webhook/sms",
+        "method": "POST",
+        "description": "Twilio webhook: receives inbound SMS and appends to message feed.",
+        "protected": False,
+    },
+    {
+        "path": "/api/comms/webhook/voice",
+        "method": "POST",
+        "description": "Twilio webhook: rings the browser client on inbound calls.",
         "protected": False,
     },
 ]
@@ -169,6 +219,91 @@ def get_comms_stats() -> Dict[str, Any]:
 
 @app.get("/api/comms/messages")
 def get_comms_messages(channel: str = "all", limit: int = 20) -> List[Dict[str, Any]]:
-    """Retrieve mock message history, optionally filtered by channel."""
+    """Retrieve message history, optionally filtered by channel."""
     msgs = _COMMS_MESSAGES if channel == "all" else [m for m in _COMMS_MESSAGES if m["channel"] == channel]
     return msgs[-limit:]
+
+
+# --- Real Twilio endpoints ---
+
+@app.get("/api/comms/config")
+def get_comms_config() -> Dict[str, Any]:
+    """Twilio integration status: shows mode (live/demo) and any missing env vars."""
+    return comms_config_status()
+
+
+@app.post("/api/comms/sms/send")
+def sms_send(payload: SMSSendRequest) -> Dict[str, Any]:
+    """Send a real SMS. Requires TWILIO_* env vars; returns error detail otherwise."""
+    try:
+        result = send_sms(payload.to, payload.body)
+        # Mirror into in-memory feed so the UI thread updates instantly
+        _COMMS_MESSAGES.append({
+            "id": len(_COMMS_MESSAGES) + 1,
+            "channel": "sms",
+            "direction": "outbound",
+            "from": "Me",
+            "text": payload.body,
+            "ts": datetime.now().strftime("%H:%M"),
+        })
+        _COMMS_STATS["total_messages"] += 1
+        _COMMS_STATS["messages_today"] += 1
+        _COMMS_STATS["sms_sent"] += 1
+        return {"ok": True, **result}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/comms/voice/token")
+def voice_token(identity: str = "dashboard-user") -> Dict[str, Any]:
+    """
+    Issue a short-lived Twilio Access Token so the browser Twilio.Device
+    can place and receive real phone calls.
+    """
+    try:
+        token = get_voice_token(identity)
+        return {"token": token, "identity": identity, "ttl": 3600}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.post("/api/comms/voice/twiml")
+async def voice_twiml(To: Optional[str] = Form(default=None)) -> Response:
+    """
+    TwiML webhook called by Twilio when the browser client places an outbound
+    call.  Set this URL as the Request URL in your TwiML App.
+    """
+    if To:
+        xml = build_dial_twiml(To)
+    else:
+        xml = build_incoming_twiml()
+    return Response(content=xml, media_type="application/xml")
+
+
+@app.post("/api/comms/webhook/sms")
+async def sms_webhook(
+    From: str = Form(...),
+    Body: str = Form(default=""),
+) -> Dict[str, Any]:
+    """
+    Twilio webhook for inbound SMS.  Set this as the Messaging webhook URL
+    on your Twilio phone number (HTTP POST).
+    """
+    _COMMS_MESSAGES.append({
+        "id": len(_COMMS_MESSAGES) + 1,
+        "channel": "sms",
+        "direction": "inbound",
+        "from": From,
+        "text": Body,
+        "ts": datetime.now().strftime("%H:%M"),
+    })
+    _COMMS_STATS["total_messages"] += 1
+    _COMMS_STATS["sms_received"] += 1
+    return {"ok": True}
+
+
+@app.post("/api/comms/webhook/voice")
+async def voice_webhook() -> Response:
+    """Twilio webhook for inbound calls: ring the browser client."""
+    xml = build_incoming_twiml()
+    return Response(content=xml, media_type="application/xml")

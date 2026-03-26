@@ -167,6 +167,33 @@
       <section id="panel-comms" class="tab-panel" role="tabpanel" aria-labelledby="tab-comms">
         <div class="layout comms-layout">
 
+          <!-- Live / Demo status banner -->
+          <section id="comms-setup-banner" class="card span-3 setup-banner hidden">
+            <div class="setup-banner-body">
+              <div>
+                <p class="eyebrow">Setup required for live calls &amp; SMS</p>
+                <h2 style="margin-bottom:.4rem">Running in Demo Mode</h2>
+                <p class="muted" style="font-size:.88rem;max-width:640px">
+                  Set the environment variables below on your backend to enable real phone calls
+                  and SMS via <strong>Twilio</strong> (free trial available — open-source SDK).
+                </p>
+              </div>
+              <div id="missing-vars-list" class="missing-vars"></div>
+            </div>
+            <details class="setup-steps">
+              <summary>Quick-start instructions</summary>
+              <ol class="setup-ol">
+                <li>Sign up at <strong>twilio.com</strong> — free trial includes $15 credit and a phone number.</li>
+                <li>Copy <code>TWILIO_ACCOUNT_SID</code> and <code>TWILIO_AUTH_TOKEN</code> from the Console dashboard.</li>
+                <li>Buy or verify a number under <strong>Phone Numbers → Manage</strong>. Set it as <code>TWILIO_PHONE_NUMBER</code> (E.164, e.g. <code>+15005550006</code>).</li>
+                <li>Create a <strong>TwiML App</strong> (Voice → TwiML Apps → Create). Set Request URL to <code>https://&lt;your-host&gt;/api/comms/voice/twiml</code>. Copy the App SID as <code>TWILIO_TWIML_APP_SID</code>.</li>
+                <li>Create an API Key (Account → API Keys → Create). Save the SID as <code>TWILIO_API_KEY</code> and the secret as <code>TWILIO_API_SECRET</code>.</li>
+                <li>On the phone number's configuration page set the <strong>Messaging webhook</strong> to <code>POST https://&lt;your-host&gt;/api/comms/webhook/sms</code> and the <strong>Voice webhook</strong> to <code>POST https://&lt;your-host&gt;/api/comms/webhook/voice</code>.</li>
+                <li>Restart the backend. The banner will disappear when all vars are detected.</li>
+              </ol>
+            </details>
+          </section>
+
           <!-- Quant Metrics Row -->
           <section class="card span-3">
             <div class="section-header">
@@ -175,7 +202,7 @@
                 <h2>Channel Metrics</h2>
               </div>
               <div class="header-pills">
-                <span class="pill comms-mode-pill">Demo Mode</span>
+                <span id="comms-mode-badge" class="pill comms-mode-pill">Demo Mode</span>
                 <span id="comms-ts" class="pill subtle"></span>
               </div>
             </div>
@@ -195,14 +222,19 @@
                 <button id="sms-filter-out" class="comms-filter-btn" data-filter="outbound">Sent</button>
               </div>
             </div>
+            <div class="to-row">
+              <input id="sms-to" placeholder="To: +1 555-000-0000" class="to-input" />
+            </div>
             <div id="sms-thread" class="chat-thread"></div>
             <form id="sms-compose" class="compose-bar" autocomplete="off">
               <input id="sms-input" placeholder="Type a message…" maxlength="160" />
               <button type="submit" class="send-btn">Send</button>
             </form>
+            <div id="sms-send-status" class="send-status hidden"></div>
             <div class="dialpad-toggle-row">
               <button id="toggle-dialpad" type="button" class="ghost-btn">Show Dialpad</button>
             </div>
+            <div id="call-status-bar" class="call-status-bar hidden"></div>
             <div id="dialpad" class="dialpad hidden">
               <div class="dp-grid">
                 <button class="dp-key" data-digit="1">1</button>
@@ -267,6 +299,8 @@
 
     </main>
 
+    <!-- Twilio Voice JS SDK (open-source: github.com/twilio/twilio-voice.js) -->
+    <script src="https://sdk.twilio.com/js/voice/releases/2.12.1/twilio.min.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
