@@ -36,6 +36,9 @@
           <button id="tab-apopo" class="tab-button" type="button" data-tab="apopo" role="tab" aria-selected="false">
             APOPO System Overview
           </button>
+          <button id="tab-comms" class="tab-button" type="button" data-tab="comms" role="tab" aria-selected="false">
+            Communications
+          </button>
         </div>
       </section>
 
@@ -158,6 +161,110 @@
           </section>
         </div>
       </section>
+    </main>
+
+      <!-- Communications Panel -->
+      <section id="panel-comms" class="tab-panel" role="tabpanel" aria-labelledby="tab-comms">
+        <div class="layout comms-layout">
+
+          <!-- Quant Metrics Row -->
+          <section class="card span-3">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">Real-time quantitative snapshot</p>
+                <h2>Channel Metrics</h2>
+              </div>
+              <div class="header-pills">
+                <span class="pill comms-mode-pill">Demo Mode</span>
+                <span id="comms-ts" class="pill subtle"></span>
+              </div>
+            </div>
+            <div id="comms-kpi-grid" class="comms-kpi-grid"></div>
+          </section>
+
+          <!-- SMS Thread -->
+          <section class="card span-2">
+            <div class="section-header">
+              <div>
+                <h2>SMS / Phone</h2>
+                <span class="muted" style="font-size:0.82rem">WebRTC demo — no real SIM required</span>
+              </div>
+              <div class="comms-channel-pills">
+                <button id="sms-filter-all" class="comms-filter-btn active" data-filter="all">All</button>
+                <button id="sms-filter-in" class="comms-filter-btn" data-filter="inbound">Inbox</button>
+                <button id="sms-filter-out" class="comms-filter-btn" data-filter="outbound">Sent</button>
+              </div>
+            </div>
+            <div id="sms-thread" class="chat-thread"></div>
+            <form id="sms-compose" class="compose-bar" autocomplete="off">
+              <input id="sms-input" placeholder="Type a message…" maxlength="160" />
+              <button type="submit" class="send-btn">Send</button>
+            </form>
+            <div class="dialpad-toggle-row">
+              <button id="toggle-dialpad" type="button" class="ghost-btn">Show Dialpad</button>
+            </div>
+            <div id="dialpad" class="dialpad hidden">
+              <div class="dp-grid">
+                <button class="dp-key" data-digit="1">1</button>
+                <button class="dp-key" data-digit="2">2 <span>ABC</span></button>
+                <button class="dp-key" data-digit="3">3 <span>DEF</span></button>
+                <button class="dp-key" data-digit="4">4 <span>GHI</span></button>
+                <button class="dp-key" data-digit="5">5 <span>JKL</span></button>
+                <button class="dp-key" data-digit="6">6 <span>MNO</span></button>
+                <button class="dp-key" data-digit="7">7 <span>PQRS</span></button>
+                <button class="dp-key" data-digit="8">8 <span>TUV</span></button>
+                <button class="dp-key" data-digit="9">9 <span>WXYZ</span></button>
+                <button class="dp-key" data-digit="*">*</button>
+                <button class="dp-key" data-digit="0">0 <span>+</span></button>
+                <button class="dp-key" data-digit="#">#</button>
+              </div>
+              <div class="dp-display-row">
+                <input id="dp-number" class="dp-display" readonly placeholder="Enter number…" />
+                <button id="dp-call" type="button" class="call-btn">Call</button>
+                <button id="dp-clear" type="button" class="ghost-btn">CLR</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Facebook Messenger -->
+          <section class="card">
+            <div class="section-header">
+              <div>
+                <h2>Messenger</h2>
+                <span class="muted" style="font-size:0.82rem">Facebook / Meta — demo mode</span>
+              </div>
+              <span class="pill fb-pill">FB Connected</span>
+            </div>
+            <div id="fb-contacts" class="contact-list"></div>
+            <div id="fb-thread" class="chat-thread"></div>
+            <form id="fb-compose" class="compose-bar" autocomplete="off">
+              <input id="fb-input" placeholder="Message…" />
+              <button type="submit" class="send-btn">Send</button>
+            </form>
+          </section>
+
+          <!-- Analytics Bar Charts -->
+          <section class="card span-2">
+            <div class="section-header">
+              <h2>Volume Analytics</h2>
+              <span class="pill subtle">Last 7 days</span>
+            </div>
+            <div id="comms-analytics" class="comms-analytics"></div>
+          </section>
+
+          <!-- Channel Distribution -->
+          <section class="card">
+            <div class="section-header">
+              <h2>Channel Distribution</h2>
+              <span class="pill subtle">Breakdown</span>
+            </div>
+            <div id="channel-dist" class="channel-dist"></div>
+            <div id="call-log" class="call-log-grid" style="margin-top:1rem;"></div>
+          </section>
+
+        </div>
+      </section>
+
     </main>
 
     <script src="app.js"></script>

@@ -11,6 +11,34 @@ from .openclaw_threat_model import generate_complete_code_string
 from .schemas import Checklist, Indicator, ScanRequest, ScanResponse
 from .security import require_api_key
 
+# --- Communications demo data ---
+_COMMS_MESSAGES: List[Dict[str, Any]] = [
+    {"id": 1, "channel": "sms", "direction": "inbound", "from": "+1 555-0101", "text": "Hey, is the deployment ready?", "ts": "09:12"},
+    {"id": 2, "channel": "sms", "direction": "outbound", "from": "Me", "text": "Running final checks now, ~10 min.", "ts": "09:13"},
+    {"id": 3, "channel": "sms", "direction": "inbound", "from": "+1 555-0101", "text": "Great, ping me when done.", "ts": "09:14"},
+    {"id": 4, "channel": "messenger", "direction": "inbound", "from": "Alice Chen", "text": "Can you share the API docs link?", "ts": "09:30"},
+    {"id": 5, "channel": "messenger", "direction": "outbound", "from": "Me", "text": "Sent! Check /api endpoint for catalog.", "ts": "09:31"},
+    {"id": 6, "channel": "messenger", "direction": "inbound", "from": "Bob Kim", "text": "Threat scan completed successfully.", "ts": "09:45"},
+    {"id": 7, "channel": "sms", "direction": "inbound", "from": "+1 555-0202", "text": "Risk score alert: CRITICAL threshold hit.", "ts": "10:02"},
+    {"id": 8, "channel": "messenger", "direction": "outbound", "from": "Me", "text": "Acknowledged, reviewing now.", "ts": "10:03"},
+]
+
+_COMMS_STATS: Dict[str, Any] = {
+    "total_messages": 1284,
+    "messages_today": 47,
+    "active_calls": 2,
+    "avg_response_ms": 340,
+    "delivery_rate_pct": 99.2,
+    "sms_sent": 623,
+    "sms_received": 418,
+    "messenger_sent": 154,
+    "messenger_received": 89,
+    "calls_completed": 38,
+    "calls_missed": 3,
+    "avg_call_duration_s": 142,
+    "channel_breakdown": {"sms": 60, "messenger": 30, "webrtc": 10},
+}
+
 
 API_CATALOG: List[Dict[str, Any]] = [
     {
@@ -60,6 +88,18 @@ API_CATALOG: List[Dict[str, Any]] = [
         "method": "POST",
         "description": "Generate Fluid-ready payload from scan results.",
         "protected": True,
+    },
+    {
+        "path": "/api/comms/stats",
+        "method": "GET",
+        "description": "Quantitative communication channel metrics (demo mode).",
+        "protected": False,
+    },
+    {
+        "path": "/api/comms/messages",
+        "method": "GET",
+        "description": "Mock message history, filterable by channel.",
+        "protected": False,
     },
 ]
 
@@ -117,3 +157,18 @@ def get_fluid_status() -> dict:
 @app.post("/api/integrations/fluid/payload", dependencies=[Depends(require_api_key)])
 def get_fluid_payload(payload: ScanRequest) -> dict:
     return build_fluid_payload(payload)
+
+
+# --- Communications endpoints (demo/mock mode) ---
+
+@app.get("/api/comms/stats")
+def get_comms_stats() -> Dict[str, Any]:
+    """Quantitative communication channel metrics."""
+    return {**_COMMS_STATS, "timestamp": datetime.now(UTC).isoformat()}
+
+
+@app.get("/api/comms/messages")
+def get_comms_messages(channel: str = "all", limit: int = 20) -> List[Dict[str, Any]]:
+    """Retrieve mock message history, optionally filtered by channel."""
+    msgs = _COMMS_MESSAGES if channel == "all" else [m for m in _COMMS_MESSAGES if m["channel"] == channel]
+    return msgs[-limit:]

@@ -308,10 +308,307 @@ form.addEventListener('submit', async (event) => {
 });
 
 tabs.forEach((tab) => {
-  tab.addEventListener('click', () => setActiveTab(tab.dataset.tab));
+  tab.addEventListener('click', () => {
+    setActiveTab(tab.dataset.tab);
+    if (tab.dataset.tab === 'comms' && !commsLoaded) {
+      commsLoaded = true;
+      loadCommsData();
+    }
+  });
 });
 
 loadIocs();
 renderApopoView();
 generateLoop();
 document.getElementById('refresh-loop').addEventListener('click', generateLoop);
+
+// ===== Communications Panel =====
+
+const COMMS_KPI_CONFIG = [
+  { key: 'total_messages',      label: 'Total Messages',     fmt: (v) => v.toLocaleString(), cls: 'kpi-blue',   sub: 'all channels' },
+  { key: 'messages_today',      label: 'Today',              fmt: (v) => v.toString(),        cls: 'kpi-cyan',   sub: 'messages' },
+  { key: 'active_calls',        label: 'Active Calls',       fmt: (v) => v.toString(),        cls: 'kpi-warn',   sub: 'live now' },
+  { key: 'avg_response_ms',     label: 'Avg Response',       fmt: (v) => `${v} ms`,           cls: 'kpi-violet', sub: 'latency' },
+  { key: 'delivery_rate_pct',   label: 'Delivery Rate',      fmt: (v) => `${v}%`,             cls: 'kpi-up',     sub: 'SMS/MMS' },
+  { key: 'sms_sent',            label: 'SMS Sent',           fmt: (v) => v.toLocaleString(),  cls: 'kpi-blue',   sub: 'cumulative' },
+  { key: 'calls_completed',     label: 'Calls Completed',    fmt: (v) => v.toString(),        cls: 'kpi-up',     sub: 'all time' },
+  { key: 'calls_missed',        label: 'Missed Calls',       fmt: (v) => v.toString(),        cls: 'kpi-danger', sub: 'requires follow-up' },
+];
+
+const WEEKLY_VOLUME = [
+  { day: 'Mon', sms: 82, msg: 24 },
+  { day: 'Tue', sms: 118, msg: 31 },
+  { day: 'Wed', sms: 95, msg: 18 },
+  { day: 'Thu', sms: 143, msg: 42 },
+  { day: 'Fri', sms: 167, msg: 55 },
+  { day: 'Sat', sms: 54, msg: 12 },
+  { day: 'Sun', sms: 38, msg: 9 },
+];
+
+const CALL_LOG = [
+  { number: '+1 555-0101', duration: '3m 12s', status: 'completed', time: '10:04' },
+  { number: '+1 555-0202', duration: '—',      status: 'missed',    time: '09:58' },
+  { number: '+1 555-0303', duration: '1m 47s', status: 'completed', time: '09:30' },
+  { number: '+1 555-0404', duration: '—',      status: 'active',    time: 'now' },
+];
+
+const FB_CONTACTS = [
+  { name: 'Alice Chen', initials: 'AC', preview: 'Sent! Check /api endpoint…', channel: 'messenger' },
+  { name: 'Bob Kim',    initials: 'BK', preview: 'Threat scan completed.', channel: 'messenger' },
+  { name: 'Ops Team',  initials: 'OT', preview: 'Risk score alert received.', channel: 'messenger' },
+];
+
+let commsStats = null;
+let commsMessages = [];
+let activeContact = 0;
+let smsFilter = 'all';
+
+async function loadCommsData() {
+  try {
+    const [statsRes, msgsRes] = await Promise.all([
+      fetch(`${API_BASE}/api/comms/stats`),
+      fetch(`${API_BASE}/api/comms/messages`),
+    ]);
+    commsStats = await statsRes.json();
+    commsMessages = await msgsRes.json();
+  } catch {
+    // demo fallback
+    commsStats = {
+      total_messages: 1284, messages_today: 47, active_calls: 2,
+      avg_response_ms: 340, delivery_rate_pct: 99.2, sms_sent: 623,
+      sms_received: 418, messenger_sent: 154, messenger_received: 89,
+      calls_completed: 38, calls_missed: 3, avg_call_duration_s: 142,
+      channel_breakdown: { sms: 60, messenger: 30, webrtc: 10 },
+      timestamp: new Date().toISOString(),
+    };
+    commsMessages = [
+      { id: 1, channel: 'sms', direction: 'inbound',  from: '+1 555-0101', text: 'Hey, is the deployment ready?', ts: '09:12' },
+      { id: 2, channel: 'sms', direction: 'outbound', from: 'Me', text: 'Running final checks now, ~10 min.', ts: '09:13' },
+      { id: 3, channel: 'sms', direction: 'inbound',  from: '+1 555-0101', text: 'Great, ping me when done.', ts: '09:14' },
+      { id: 4, channel: 'messenger', direction: 'inbound',  from: 'Alice Chen', text: 'Can you share the API docs link?', ts: '09:30' },
+      { id: 5, channel: 'messenger', direction: 'outbound', from: 'Me', text: 'Sent! Check /api endpoint for catalog.', ts: '09:31' },
+      { id: 6, channel: 'messenger', direction: 'inbound',  from: 'Bob Kim', text: 'Threat scan completed successfully.', ts: '09:45' },
+      { id: 7, channel: 'sms', direction: 'inbound',  from: '+1 555-0202', text: 'Risk score alert: CRITICAL threshold hit.', ts: '10:02' },
+      { id: 8, channel: 'messenger', direction: 'outbound', from: 'Me', text: 'Acknowledged, reviewing now.', ts: '10:03' },
+    ];
+  }
+  renderCommsPanel();
+}
+
+function renderCommsPanel() {
+  renderKPIs();
+  renderSmsThread();
+  renderFbContacts();
+  renderFbThread();
+  renderAnalytics();
+  renderChannelDist();
+  renderCallLog();
+}
+
+function renderKPIs() {
+  const grid = document.getElementById('comms-kpi-grid');
+  const ts = document.getElementById('comms-ts');
+  if (commsStats && ts) {
+    const d = new Date(commsStats.timestamp);
+    ts.textContent = `Updated ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  }
+  if (!grid || !commsStats) return;
+  grid.innerHTML = COMMS_KPI_CONFIG.map(({ key, label, fmt, cls, sub }) => {
+    const val = commsStats[key] ?? '—';
+    return `
+      <div class="kpi-card">
+        <div class="kpi-label">${label}</div>
+        <div class="kpi-value ${cls}">${fmt(val)}</div>
+        <div class="kpi-sub">${sub}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderSmsThread() {
+  const thread = document.getElementById('sms-thread');
+  if (!thread) return;
+  const msgs = commsMessages.filter((m) => {
+    if (m.channel !== 'sms') return false;
+    if (smsFilter === 'all') return true;
+    return m.direction === smsFilter;
+  });
+  thread.innerHTML = msgs.map((m) => `
+    <div class="chat-bubble ${m.direction === 'outbound' ? 'out' : 'in'}">
+      <div class="bubble-body">${escHtml(m.text)}</div>
+      <div class="bubble-meta">${m.direction === 'inbound' ? escHtml(m.from) + ' · ' : ''}${m.ts}</div>
+    </div>
+  `).join('');
+  thread.scrollTop = thread.scrollHeight;
+}
+
+function renderFbContacts() {
+  const list = document.getElementById('fb-contacts');
+  if (!list) return;
+  list.innerHTML = FB_CONTACTS.map((c, i) => `
+    <div class="contact-item ${i === activeContact ? 'active' : ''}" data-idx="${i}">
+      <div class="contact-avatar">${c.initials}</div>
+      <div class="contact-meta">
+        <span class="contact-name">${c.name}</span>
+        <span class="contact-preview">${c.preview}</span>
+      </div>
+    </div>
+  `).join('');
+  list.querySelectorAll('.contact-item').forEach((el) => {
+    el.addEventListener('click', () => {
+      activeContact = Number(el.dataset.idx);
+      renderFbContacts();
+      renderFbThread();
+    });
+  });
+}
+
+function renderFbThread() {
+  const thread = document.getElementById('fb-thread');
+  if (!thread) return;
+  const contact = FB_CONTACTS[activeContact];
+  const msgs = commsMessages.filter((m) => m.channel === 'messenger' && (m.from === contact.name || m.direction === 'outbound'));
+  if (!msgs.length) {
+    thread.innerHTML = '<p class="muted" style="font-size:0.82rem;padding:0.5rem 0">No messages with this contact yet.</p>';
+    return;
+  }
+  thread.innerHTML = msgs.map((m) => `
+    <div class="chat-bubble ${m.direction === 'outbound' ? 'out' : 'in'}">
+      <div class="bubble-body">${escHtml(m.text)}</div>
+      <div class="bubble-meta">${m.direction === 'inbound' ? escHtml(m.from) + ' · ' : ''}${m.ts}</div>
+    </div>
+  `).join('');
+  thread.scrollTop = thread.scrollHeight;
+}
+
+function renderAnalytics() {
+  const container = document.getElementById('comms-analytics');
+  if (!container) return;
+  const maxSms = Math.max(...WEEKLY_VOLUME.map((d) => d.sms));
+  const maxMsg = Math.max(...WEEKLY_VOLUME.map((d) => d.msg));
+  container.innerHTML = WEEKLY_VOLUME.map(({ day, sms, msg }) => `
+    <div class="analytics-row">
+      <div class="analytics-label-row">
+        <span>${day}</span>
+        <span style="color:#60a5fa">SMS ${sms}</span>
+        <span style="color:var(--violet)">MSG ${msg}</span>
+      </div>
+      <div class="analytics-bar-track">
+        <div class="analytics-bar-fill" style="width:${(sms / maxSms) * 100}%;background:#2563eb;height:5px;border-radius:999px"></div>
+      </div>
+      <div class="analytics-bar-track" style="height:5px;margin-top:2px">
+        <div class="analytics-bar-fill" style="width:${(msg / maxMsg) * 100}%;background:var(--violet);height:5px;border-radius:999px"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderChannelDist() {
+  const container = document.getElementById('channel-dist');
+  if (!container || !commsStats) return;
+  const colors = { sms: '#2563eb', messenger: '#1877f2', webrtc: 'var(--cyan)' };
+  const bd = commsStats.channel_breakdown;
+  container.innerHTML = Object.entries(bd).map(([ch, pct]) => `
+    <div class="dist-row">
+      <span class="dist-label">${ch.toUpperCase()}</span>
+      <div class="dist-track">
+        <div class="dist-fill" style="width:${pct}%;background:${colors[ch] || '#94a3b8'}"></div>
+      </div>
+      <span class="dist-pct">${pct}%</span>
+    </div>
+  `).join('');
+}
+
+function renderCallLog() {
+  const container = document.getElementById('call-log');
+  if (!container) return;
+  container.innerHTML = `<p class="muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.3rem">Recent Calls</p>` +
+    CALL_LOG.map((c) => `
+      <div class="call-log-item">
+        <span>
+          <span class="call-status-dot dot-${c.status}"></span>
+          ${escHtml(c.number)}
+        </span>
+        <span style="color:var(--muted)">${c.duration}</span>
+        <span style="color:var(--muted)">${c.time}</span>
+      </div>
+    `).join('');
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// SMS compose
+document.getElementById('sms-compose').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = document.getElementById('sms-input');
+  const text = input.value.trim();
+  if (!text) return;
+  commsMessages.push({ id: Date.now(), channel: 'sms', direction: 'outbound', from: 'Me', text, ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+  input.value = '';
+  renderSmsThread();
+  if (commsStats) { commsStats.total_messages++; commsStats.messages_today++; commsStats.sms_sent++; renderKPIs(); }
+});
+
+// FB compose
+document.getElementById('fb-compose').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = document.getElementById('fb-input');
+  const text = input.value.trim();
+  if (!text) return;
+  commsMessages.push({ id: Date.now(), channel: 'messenger', direction: 'outbound', from: 'Me', text, ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+  input.value = '';
+  renderFbThread();
+  if (commsStats) { commsStats.total_messages++; commsStats.messages_today++; commsStats.messenger_sent++; renderKPIs(); }
+});
+
+// SMS filter buttons
+document.querySelectorAll('.comms-filter-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.comms-filter-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    smsFilter = btn.dataset.filter;
+    renderSmsThread();
+  });
+});
+
+// Dialpad toggle
+const dialpad = document.getElementById('dialpad');
+const toggleBtn = document.getElementById('toggle-dialpad');
+toggleBtn.addEventListener('click', () => {
+  const hidden = dialpad.classList.toggle('hidden');
+  toggleBtn.textContent = hidden ? 'Show Dialpad' : 'Hide Dialpad';
+});
+
+// Dialpad keys
+document.querySelectorAll('.dp-key').forEach((key) => {
+  key.addEventListener('click', () => {
+    const display = document.getElementById('dp-number');
+    display.value += key.dataset.digit;
+  });
+});
+
+document.getElementById('dp-clear').addEventListener('click', () => {
+  const display = document.getElementById('dp-number');
+  display.value = display.value.slice(0, -1);
+});
+
+document.getElementById('dp-call').addEventListener('click', () => {
+  const number = document.getElementById('dp-number').value.trim();
+  if (!number) return;
+  CALL_LOG.unshift({ number, duration: '—', status: 'active', time: 'now' });
+  renderCallLog();
+  setTimeout(() => {
+    const item = CALL_LOG.find((c) => c.number === number && c.status === 'active');
+    if (item) { item.status = 'completed'; item.duration = '0m 42s'; renderCallLog(); }
+    if (commsStats) { commsStats.calls_completed++; renderKPIs(); }
+  }, 4000);
+});
+
+// commsLoaded flag used by tab click handlers above
+let commsLoaded = false;
