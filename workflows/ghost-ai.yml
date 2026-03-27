@@ -1,0 +1,59 @@
+name: Ghost AI Security Scan
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      goal:
+        description: 'Security goal for Ghost AI agent'
+        required: false
+        default: 'Scan repository for secrets and credential leaks'
+
+jobs:
+  ghost-secret-scan:
+    name: Ghost AI — Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_x64.tar.gz \
+            | tar -xz -C /usr/local/bin gitleaks
+
+      - name: Ghost AI / Gitleaks scan
+        run: |
+          gitleaks detect --source . --report-format sarif --report-path gitleaks.sarif || true
+          echo "[Ghost AI] Gitleaks scan complete"
+
+      - name: Install TruffleHog
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh \
+            | sh -s -- -b /usr/local/bin
+
+      - name: Ghost AI / TruffleHog scan
+        run: |
+          trufflehog filesystem . --json --no-update > trufflehog.jsonl 2>/dev/null || true
+          COUNT=$(wc -l < trufflehog.jsonl | tr -d ' ')
+          echo "[Ghost AI] TruffleHog found ${COUNT} potential secrets"
+
+      - name: Upload SARIF results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gitleaks.sarif
+        continue-on-error: true
+
+      - name: Upload scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghost-ai-scan-results
+          path: |
+            gitleaks.sarif
+            trufflehog.jsonl
