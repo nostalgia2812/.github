@@ -67,19 +67,33 @@ New endpoints:
 - Endpoint: `GET /api`
 - Returns the complete list of all exposed endpoints with HTTP method, description, and whether API key protection applies.
 
-## Dashboard modes
 
-The frontend now exposes two views side by side:
+### Defensive provider catalog
 
-- **Defense Console**: the original skill-analysis workflow with scan form, risk meter, findings, rule impact, and IOC list
-- **APOPO System Overview**: a frontend summary of the supplied APOPO architecture, deployment flow, docs map, and benchmark claims, with explicit notes that benchmark numbers are illustrative unless validated in-repo
+- Endpoint: `GET /api/providers`
+- Returns supported threat-intelligence providers for defensive monitoring together with an explicit blocked-use policy for offensive misuse.
 
-### View the frontend locally
 
-```bash
-cd frontend
-python -m http.server 8080
-```
+### Safety policy
 
-Then open `http://localhost:8080` and switch between the two tabs.
+- Endpoint: `GET /api/safety/policy`
+- Returns the blocked offensive capability list and approved defensive alternatives implemented by this service.
 
+
+### Dashboard context
+
+- Endpoint: `GET /api/dashboard/context`
+- Returns recent content and integrated workflow tools that the frontend uses to make analyst decisions and reporting more efficient.
+
+
+### Developer toolkit context
+
+- Endpoint: `GET /api/developer-toolkit`
+- Returns safe ADK, Gemini CLI, KitOps, and PowerShell workflow guidance used by the dashboard to improve developer productivity.
+
+
+### API auditing
+
+- Endpoint: `POST /api/audit`
+- Utility script: `node scripts/audit.js <url>`
+- Audits endpoint status code and latency, and reminds the operator when a sensitive endpoint is tested over `http://` instead of `https://`.

@@ -11,7 +11,7 @@ import json
 import re
 import sys
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -133,7 +133,7 @@ echo "$encoded_script" | base64 --decode | bash
     def _append(self, phase: AttackPhase, severity: ThreatLevel, description: str, ioc_hit: Optional[str], raw_data: Dict[str, Any]) -> None:
         self.events.append(
             SecurityEvent(
-                timestamp=datetime.now(UTC).isoformat(),
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 phase=phase,
                 severity=severity,
                 description=description,
@@ -207,7 +207,7 @@ class CodeInsightEngine:
             shell_commands=[block.strip() for block in code_blocks],
             network_endpoints=urls,
             obfuscation_detected="obfuscation" in indicators,
-            analysis_timestamp=datetime.now(UTC).isoformat(),
+            analysis_timestamp=datetime.now(timezone.utc).isoformat(),
             summary=summary,
         )
 
@@ -233,12 +233,12 @@ class SkillSandbox:
         if action == "network_connect":
             host = params.get("host", "")
             if host.startswith("http://") and all(domain not in host for domain in self.allowed_domains):
-                return SecurityEvent(datetime.now(UTC).isoformat(), AttackPhase.execution, ThreatLevel.high, f"Blocked insecure host {host}", "insecure_http", params)
+                return SecurityEvent(datetime.now(timezone.utc).isoformat(), AttackPhase.execution, ThreatLevel.high, f"Blocked insecure host {host}", "insecure_http", params)
 
         if action == "file_access":
             path = Path(params.get("path", ""))
             if any(str(path).startswith(str(sensitive)) for sensitive in self.sensitive_paths):
-                return SecurityEvent(datetime.now(UTC).isoformat(), AttackPhase.exfiltration, ThreatLevel.critical, f"Blocked sensitive path {path}", "sensitive_file_access", params)
+                return SecurityEvent(datetime.now(timezone.utc).isoformat(), AttackPhase.exfiltration, ThreatLevel.critical, f"Blocked sensitive path {path}", "sensitive_file_access", params)
         return None
 
 

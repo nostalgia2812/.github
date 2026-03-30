@@ -45,3 +45,16 @@ class Checklist(BaseModel):
     immediate_24h: List[str]
     architecture_1_2_weeks: List[str]
     advanced_1_month: List[str]
+
+
+class AuditRequest(BaseModel):
+    url: str = Field(min_length=1)
+
+
+class AuditResponse(BaseModel):
+    url: str
+    ok: bool
+    status_code: int | None
+    latency_ms: int
+    message: str
+    https_recommended: bool

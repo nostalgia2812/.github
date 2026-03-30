@@ -13,61 +13,25 @@ from .security import require_api_key
 
 
 API_CATALOG: List[Dict[str, Any]] = [
-    {
-        "path": "/api",
-        "method": "GET",
-        "description": "List all available API endpoints.",
-        "protected": False,
-    },
-    {
-        "path": "/api/health",
-        "method": "GET",
-        "description": "Service health and server timestamp.",
-        "protected": False,
-    },
-    {
-        "path": "/api/iocs",
-        "method": "GET",
-        "description": "Known OpenClaw-related indicators of compromise.",
-        "protected": False,
-    },
-    {
-        "path": "/api/checklist",
-        "method": "GET",
-        "description": "Operational defense checklist grouped by timeline.",
-        "protected": False,
-    },
-    {
-        "path": "/api/scan",
-        "method": "POST",
-        "description": "Analyze skill instruction content and compute risk score/findings.",
-        "protected": True,
-    },
-    {
-        "path": "/api/threat-model/raw",
-        "method": "GET",
-        "description": "Export the complete OpenClaw threat-model Python source.",
-        "protected": True,
-    },
-    {
-        "path": "/api/integrations/fluid/status",
-        "method": "GET",
-        "description": "Show Fluid integration configuration status.",
-        "protected": True,
-    },
-    {
-        "path": "/api/integrations/fluid/payload",
-        "method": "POST",
-        "description": "Generate Fluid-ready payload from scan results.",
-        "protected": True,
-    },
+    {"path": "/api", "method": "GET", "description": "List all available API endpoints.", "protected": False},
+    {"path": "/api/health", "method": "GET", "description": "Service health and server timestamp.", "protected": False},
+    {"path": "/api/iocs", "method": "GET", "description": "Known OpenClaw-related indicators of compromise.", "protected": False},
+    {"path": "/api/checklist", "method": "GET", "description": "Operational defense checklist grouped by timeline.", "protected": False},
+    {"path": "/api/scan", "method": "POST", "description": "Analyze skill instruction content and compute risk score/findings.", "protected": True},
+    {"path": "/api/threat-model/raw", "method": "GET", "description": "Export the complete OpenClaw threat-model Python source.", "protected": True},
+    {"path": "/api/integrations/fluid/status", "method": "GET", "description": "Show Fluid integration configuration status.", "protected": True},
+    {"path": "/api/integrations/fluid/payload", "method": "POST", "description": "Generate Fluid-ready payload from scan results.", "protected": True},
+    {"path": "/api/providers", "method": "GET", "description": "Show supported defensive threat-intelligence providers and usage policy.", "protected": False},
+    {"path": "/api/safety/policy", "method": "GET", "description": "Show blocked offensive capabilities and approved defensive alternatives.", "protected": False},
+    {"path": "/api/dashboard/context", "method": "GET", "description": "Return latest content and workflow tools to improve dashboard efficiency.", "protected": False},
+    {"path": "/api/developer-toolkit", "method": "GET", "description": "Return safe ADK, Gemini CLI, KitOps, and PowerShell workflow guidance.", "protected": False},
+    {"path": "/api/audit", "method": "POST", "description": "Audit a URL for status/latency and remind when HTTPS is not used.", "protected": False},
 ]
-
 
 app = FastAPI(
     title="AI Skill Defense API",
     description="Backend service for analyzing AI agent skills and tracking OpenClaw-style indicators.",
-    version="2.2.0",
+    version="2.5.0",
 )
 
 app.add_middleware(
@@ -86,7 +50,7 @@ def list_api() -> dict:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "timestamp": datetime.now(UTC).isoformat()}
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/api/iocs", response_model=List[Indicator])
@@ -117,3 +81,36 @@ def get_fluid_status() -> dict:
 @app.post("/api/integrations/fluid/payload", dependencies=[Depends(require_api_key)])
 def get_fluid_payload(payload: ScanRequest) -> dict:
     return build_fluid_payload(payload)
+
+
+@app.get("/api/providers")
+def get_provider_catalog() -> dict:
+    return provider_catalog()
+
+
+@app.get("/api/safety/policy")
+def safety_policy() -> dict:
+    return get_safety_policy()
+
+
+@app.get("/api/dashboard/context")
+def get_dashboard_context() -> dict:
+    return dashboard_context()
+
+
+@app.get("/api/developer-toolkit")
+def get_developer_toolkit() -> dict:
+    return developer_toolkit_context()
+
+
+@app.post("/api/audit", response_model=AuditResponse)
+def audit_endpoint(payload: AuditRequest) -> AuditResponse:
+    result = audit_url(payload.url)
+    return AuditResponse(
+        url=result.url,
+        ok=result.ok,
+        status_code=result.status_code,
+        latency_ms=result.latency_ms,
+        message=result.message,
+        https_recommended=result.https_recommended,
+    )

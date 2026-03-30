@@ -171,9 +171,7 @@ function renderBars(findings) {
 function renderResult(data) {
   const findings = data.findings
     .map(
-      (f) => `<li><strong>${f.rule}</strong> (${f.severity}) - ${f.reason}<br /><span class="muted">Evidence: ${
-        f.evidence.join(', ') || 'n/a'
-      }</span></li>`,
+      (f) => `<li><strong>${f.rule}</strong> (${f.severity}) - ${f.reason}<br /><span class="muted">Evidence: ${f.evidence.join(', ') || 'n/a'}</span></li>`,
     )
     .join('');
 
@@ -187,100 +185,60 @@ function renderResult(data) {
   renderBars(data.findings);
 }
 
+function renderDashboardContext(data) {
+  latestContent.className = 'grid-list';
+  latestContent.innerHTML = data.latest_content
+    .map((item) => `<article class="mini-card"><span class="mini-date">${item.date}</span><strong>${item.title}</strong><span class="muted">${item.category}</span></article>`)
+    .join('');
+
+  toolList.className = 'grid-list';
+  toolList.innerHTML = data.tools
+    .map((tool) => `<article class="mini-card"><strong>${tool.name}</strong><span class="muted">${tool.role}</span><p>${tool.benefit}</p></article>`)
+    .join('');
+
+  dashboardInsight.classList.remove('muted');
+  dashboardInsight.textContent = data.insight;
+}
+
+function renderDeveloperToolkit(data) {
+  developerWorkflows.className = 'grid-list';
+  developerWorkflows.innerHTML = data.developer_workflows
+    .map((item) => `<article class="mini-card"><strong>${item.name}</strong><span class="muted">${item.focus}</span><p>${item.value}</p></article>`)
+    .join('');
+
+  powershellCommands.className = 'command-list';
+  powershellCommands.innerHTML = data.powershell_commands
+    .map((item) => `<article class="command-card"><code>${item.command}</code><span>${item.description}</span><span class="muted">${item.example}</span></article>`)
+    .join('');
+}
+
+function renderAuditResult(data) {
+  auditResult.classList.remove('muted');
+  auditResult.innerHTML = `
+    <p><strong>URL:</strong> ${data.url}</p>
+    <p><strong>Status:</strong> ${data.status_code ?? 'unavailable'} | <strong>Latency:</strong> ${data.latency_ms}ms</p>
+    <p><strong>Message:</strong> ${data.message}</p>
+    <p><strong>HTTPS Reminder:</strong> ${data.https_recommended ? 'Use https:// for sensitive endpoints.' : 'HTTPS already in use or not applicable.'}</p>
+  `;
+}
+
+async function loadDeveloperToolkit() {
+  const response = await fetch(`${API_BASE}/api/developer-toolkit`);
+  const payload = await response.json();
+  renderDeveloperToolkit(payload);
+}
+
+async function loadDashboardContext() {
+  const response = await fetch(`${API_BASE}/api/dashboard/context`);
+  const payload = await response.json();
+  renderDashboardContext(payload);
+}
+
 async function loadIocs() {
   const response = await fetch(`${API_BASE}/api/iocs`);
   const iocs = await response.json();
   iocList.innerHTML = iocs
     .map((ioc) => `<li><strong>${ioc.type}</strong>: ${ioc.value} <span class="muted">(${ioc.severity})</span></li>`)
-    .join('');
-}
-
-function renderApopoView() {
-  document.getElementById('service-flow').innerHTML = components
-    .map(
-      (component) => `
-        <article class="headline-card accent-${component.accent}">
-          <p class="flow-step">${component.detail}</p>
-          <h3>${component.name}</h3>
-          <p class="muted">${component.summary}</p>
-        </article>
-      `,
-    )
-    .join('');
-
-  document.getElementById('service-details').innerHTML = components
-    .map(
-      (component) => `
-        <article class="fact-card verified">
-          <h3>${component.title}</h3>
-          <p>${component.summary}</p>
-          <p class="muted"><strong>Mapped from:</strong> ${component.name}</p>
-        </article>
-      `,
-    )
-    .join('');
-
-  document.getElementById('guardrails').innerHTML = guardrails
-    .map(
-      (item) => `
-        <article class="timeline-item">
-          <span class="timeline-date">Trust note</span>
-          <p>${item}</p>
-        </article>
-      `,
-    )
-    .join('');
-
-  document.getElementById('workflow-grid').innerHTML = workflowSteps
-    .map(
-      (step) => `
-        <article class="signal-card">
-          <h3>${step.title}</h3>
-          <p>${step.text}</p>
-        </article>
-      `,
-    )
-    .join('');
-
-  document.getElementById('blueprint-metrics').innerHTML = blueprintMetrics
-    .map(
-      (metric) => `
-        <div class="metric-card">
-          <span>${metric.label}</span>
-          <strong>${metric.value}</strong>
-        </div>
-      `,
-    )
-    .join('');
-
-  document.getElementById('filesystem-tree').textContent = filesystemTree;
-
-  document.getElementById('checklist').innerHTML = deploymentChecklist
-    .map((item) => `<li>${item}</li>`)
-    .join('');
-
-  document.getElementById('commands').innerHTML = commands
-    .map((command) => `<pre>${command}</pre>`)
-    .join('');
-}
-
-function generateLoop() {
-  const loop = document.getElementById('conversation-loop');
-  const offset = Math.floor(Math.random() * loopSeed.length);
-  const ordered = loopSeed.map((_, index) => loopSeed[(index + offset) % loopSeed.length]);
-
-  loop.innerHTML = ordered
-    .map(
-      (entry) => `
-        <article class="message-card">
-          <div class="message-meta">
-            <strong>${entry.model}</strong>
-            <span>${entry.role}</span>
-          </div>
-          <p>${entry.text}</p>
-        </article>
-      `,
-    )
     .join('');
 }
 
@@ -291,11 +249,7 @@ form.addEventListener('submit', async (event) => {
     skill_name: document.getElementById('skill_name').value,
     publisher: document.getElementById('publisher').value,
     instruction_text: document.getElementById('instruction_text').value,
-    urls: document
-      .getElementById('urls')
-      .value.split(',')
-      .map((value) => value.trim())
-      .filter(Boolean),
+    urls: document.getElementById('urls').value.split(',').map((value) => value.trim()).filter(Boolean),
   };
 
   const response = await fetch(`${API_BASE}/api/scan`, {
@@ -307,11 +261,18 @@ form.addEventListener('submit', async (event) => {
   renderResult(await response.json());
 });
 
-tabs.forEach((tab) => {
-  tab.addEventListener('click', () => setActiveTab(tab.dataset.tab));
+auditForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  const response = await fetch(`${API_BASE}/api/audit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: document.getElementById('audit_url').value }),
+  });
+
+  renderAuditResult(await response.json());
 });
 
 loadIocs();
-renderApopoView();
-generateLoop();
-document.getElementById('refresh-loop').addEventListener('click', generateLoop);
+loadDashboardContext();
+loadDeveloperToolkit();

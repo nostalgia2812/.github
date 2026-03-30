@@ -3,6 +3,84 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Skill Defense Console</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>AI Skill Defense Dashboard</h1>
+        <p>Deploy-ready dashboard with direct risk visualization for skill screening workflows.</p>
+      </div>
+      <span class="pill">OpenClaw Model</span>
+    </header>
+
+    <main class="layout">
+      <section class="card span-2">
+        <h2>Skill Analysis</h2>
+        <form id="scan-form">
+          <label>Skill Name <input id="skill_name" required /></label>
+          <label>Publisher <input id="publisher" required /></label>
+          <label>Instruction Text <textarea id="instruction_text" rows="4" required></textarea></label>
+          <label>URLs (comma separated) <input id="urls" placeholder="http://example.com/sample.zip" /></label>
+          <button type="submit">Run Analysis</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Risk Meter</h2>
+        <div class="meter"><div id="meter-fill" class="meter-fill"></div></div>
+        <p id="meter-label" class="muted">Run a scan to visualize risk.</p>
+        <div id="risk-level" class="risk-level hidden"></div>
+      </section>
+
+      <section class="card span-2">
+        <h2>Findings</h2>
+        <article id="result" class="result muted">No scan results yet.</article>
+      </section>
+
+      <section class="card">
+        <h2>Rule Impact</h2>
+        <div id="bars" class="bars muted">No rule matches yet.</div>
+      </section>
+
+      <section class="card">
+        <h2>Threat Intelligence</h2>
+        <ul id="ioc-list" class="stack"></ul>
+      </section>
+
+      <section class="card span-2">
+        <h2>Latest Content</h2>
+        <div id="latest-content" class="grid-list muted">Loading latest content…</div>
+      </section>
+
+      <section class="card">
+        <h2>Integrated Tools</h2>
+        <div id="tool-list" class="grid-list muted">Loading tools…</div>
+      </section>
+
+      <section class="card span-3">
+        <h2>Efficiency Insight</h2>
+        <p id="dashboard-insight" class="muted">Loading dashboard insight…</p>
+      </section>
+
+      <section class="card span-2">
+        <h2>Developer Toolkit</h2>
+        <div id="developer-workflows" class="grid-list muted">Loading developer workflows…</div>
+      </section>
+
+      <section class="card">
+        <h2>PowerShell CLI</h2>
+        <div id="powershell-commands" class="command-list muted">Loading commands…</div>
+      </section>
+
+      <section class="card span-2">
+        <h2>API Auditor</h2>
+        <form id="audit-form">
+          <label>URL to audit <input id="audit_url" placeholder="https://example.com/api/health" required /></label>
+          <button type="submit">Audit Endpoint</button>
+        </form>
+        <article id="audit-result" class="result muted">No audit run yet.</article>
     <title>AI Skill Defense Console + APOPO System Overview</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
